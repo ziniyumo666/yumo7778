@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>語音推論結果</title>
+  <meta http-equiv="refresh" content="3">
+  <style>
+    body { text-align: center; font-family: sans-serif; margin-top: 100px; }
+    h1 { color: #333; }
+    h2 { font-size: 3em; color: green; }
+  </style>
+</head>
+<body>
+  <h1>最新語音推論結果</h1>
+  <h2 id="result">讀取中...</h2>
+
+  <script>
+    async function fetchResult() {
+      const res = await fetch('/latest');
+      const data = await res.json();
+      document.getElementById('result').textContent = data.result;
+    }
+
+    setInterval(fetchResult, 3000); // 每 3 秒自動更新
+    fetchResult();
+  </script>
+</body>
+</html>
