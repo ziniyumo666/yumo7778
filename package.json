@@ -1,4 +1,9 @@
 {
+  "name": "pico-voice-server",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js"
+  },
   "description": "",
   "dependencies": {
     "body-parser": "^2.2.0",
