@@ -23,6 +23,7 @@ app.get('/latest', (req, res) => {
     res.json({ result: latestResult });
 });
 
-app.listen(port, () => {
-    console.log(`伺服器已啟動：http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`伺服器啟動在 http://0.0.0.0:${port}`);
 });
+
