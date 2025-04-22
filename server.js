@@ -7,7 +7,8 @@ app.use(bodyParser.json());
 app.use(express.static('public'));  // 提供網頁
 
 app.post('/upload', (req, res) => {
-  const { event, time } = req.body;
+  const { event } = req.body; // ✅ 只取 event，不要取 time
+  const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });  // ✅ 加入現在時間（台灣時區）
   logs.push({ event, time });
   console.log("收到傾倒事件：", event, time);
   res.send('OK');
