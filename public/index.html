@@ -20,7 +20,9 @@
       const res = await fetch('/logs');
       const logs = await res.json();
       const table = document.getElementById('logTable');
-      logs.forEach(log => {
+
+      // ✅ 反轉 logs，讓最新的顯示在上面
+      logs.reverse().forEach(log => {
         const row = document.createElement('tr');
         row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
         table.appendChild(row);
@@ -32,3 +34,4 @@
   </script>
 </body>
 </html>
+
