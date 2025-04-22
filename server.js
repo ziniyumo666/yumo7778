@@ -1,29 +1,20 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
-const port = process.env.PORT || 3000;
-
-let latestResult = '尚未接收';
+const logs = [];  // 暫存資料用
 
 app.use(bodyParser.json());
-app.use(express.static('public')); // 提供 public 資料夾靜態檔案
+app.use(express.static('public'));  // 提供網頁
 
 app.post('/upload', (req, res) => {
-    const result = req.body.result;
-    if (result) {
-        console.log("收到推論結果：", result);
-        latestResult = result;
-        res.send('接收成功');
-    } else {
-        res.status(400).send('資料格式錯誤');
-    }
+  const { event, time } = req.body;
+  logs.push({ event, time });
+  console.log("收到傾倒事件：", event, time);
+  res.send('OK');
 });
 
-app.get('/latest', (req, res) => {
-    res.json({ result: latestResult });
+app.get('/logs', (req, res) => {
+  res.json(logs);
 });
 
-app.listen(port, '0.0.0.0', () => {
-    console.log(`伺服器啟動在 http://0.0.0.0:${port}`);
-});
-
+app.listen(process.env.PORT || 3000, '0.0.0.0');
