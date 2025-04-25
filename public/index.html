@@ -2,18 +2,23 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>傾倒紀錄</title>
+  <title>感測器傾倒紀錄與影像</title>
   <style>
     body { font-family: sans-serif; text-align: center; }
-    table { margin: 0 auto; border-collapse: collapse; }
+    table { margin: 20px auto; border-collapse: collapse; }
     th, td { border: 1px solid #ccc; padding: 8px; }
+    img { margin-top: 20px; width: 320px; height: auto; border: 2px solid #ccc; }
   </style>
 </head>
 <body>
   <h1>感測器傾倒紀錄</h1>
+
   <table id="logTable">
     <tr><th>事件</th><th>時間</th></tr>
   </table>
+
+  <h2>最新即時影像</h2>
+  <img id="camera" src="/latest.jpg" alt="Loading image..." />
 
   <script>
     async function loadLogs() {
@@ -21,7 +26,10 @@
       const logs = await res.json();
       const table = document.getElementById('logTable');
 
-      // ✅ 反轉 logs，讓最新的顯示在上面
+      // 清空舊資料
+      table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>';
+
+      // 反轉 logs，最新在上面
       logs.reverse().forEach(log => {
         const row = document.createElement('tr');
         row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
@@ -29,8 +37,20 @@
       });
     }
 
+    function refreshImage() {
+      const img = document.getElementById('camera');
+      img.src = '/latest.jpg?t=' + new Date().getTime();  // 加時間參數防止快取
+    }
+
+    // 一開始就載入一次
     loadLogs();
-    setInterval(() => location.reload(), 5000);  // 每5秒更新
+    refreshImage();
+
+    // 每5秒更新一次紀錄和照片
+    setInterval(() => {
+      loadLogs();
+      refreshImage();
+    }, 5000);
   </script>
 </body>
 </html>
