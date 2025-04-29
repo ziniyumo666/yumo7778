@@ -21,7 +21,7 @@
 
   <h2>最新即時影像</h2>
   <img id="camera" src="/latest.jpg" alt="Loading image..." />
-
+  
   <script>
     async function loadLogs() {
       const res = await fetch('/logs');
@@ -54,6 +54,9 @@
       refreshImage();
     }, 5000);
   </script>
+  <h3>最後上傳時間</h3>
+  <pre id="logContent">載入中...</pre>
+
 </body>
 </html>
 
