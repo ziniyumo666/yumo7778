@@ -1,74 +1,147 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
   <title>感測器傾倒紀錄與影像</title>
-  <link rel="icon" href="/io.png" type="image/x-icon" />
-
+  <link rel="icon" href="/io.png" type="image/png" />
   <style>
-    body { font-family: sans-serif; text-align: center; }
-    table { margin: 20px auto; border-collapse: collapse; }
-    th, td { border: 1px solid #ccc; padding: 8px; }
-    img { margin-top: 20px; width: 320px; height: auto; border: 2px solid #ccc; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f6f8;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    header {
+      background-color: #3f51b5;
+      color: white;
+      padding: 20px 0;
+      margin-bottom: 30px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    h1, h2, h3 {
+      margin: 10px 0;
+    }
+    main {
+      max-width: 1000px;
+      margin: auto;
+      padding: 20px;
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    }
+    table {
+      width: 90%;
+      margin: 20px auto;
+      border-collapse: collapse;
+      background-color: #fff;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px;
+      border: 1px solid #ddd;
+      text-align: center;
+    }
+    th {
+      background-color: #3f51b5;
+      color: white;
+    }
+    tr:nth-child(even) {
+      background-color: #f2f2f2;
+    }
+    img {
+      margin-top: 20px;
+      width: 90%;
+      max-width: 600px;
+      height: auto;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    #logContent {
+      background: #eef1f5;
+      padding: 10px;
+      border-radius: 6px;
+      display: inline-block;
+      margin-top: 10px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 16px;
+      color: #333;
+    }
+    footer {
+      margin-top: 30px;
+      padding: 10px;
+      font-size: 12px;
+      color: #888;
+    }
   </style>
 </head>
+
 <body>
-  <h1>感測器傾倒紀錄</h1>
+  <header>
+    <h1>感測器傾倒紀錄與影像系統</h1>
+  </header>
 
-  <table id="logTable">
-    <tr><th>事件</th><th>時間</th></tr>
-  </table>
+  <main>
+    <h2>傾倒事件紀錄</h2>
+    <table id="logTable">
+      <tr><th>事件</th><th>時間</th></tr>
+    </table>
 
-  <h2>最新即時影像</h2>
-  <img id="camera" src="/latest.jpg" alt="Loading image..." />
-  
-  <script>
-    async function loadLogs() {
-      const res = await fetch('/logs');
-      const logs = await res.json();
-      const table = document.getElementById('logTable');
+    <h2>即時影像</h2>
+    <img id="camera" src="/latest.jpg" alt="Loading image..." />
 
-      table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>';
-      logs.reverse().forEach(log => {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
-        table.appendChild(row);
-      });
+    <h2>最後上傳時間</h2>
+    <pre id="logContent">載入中...</pre>
+  </main>
+
+  <footer>
+    Powered by ESP32-CAM ｜ Sausagee Party Server
+  </footer>
+
+<script>
+  async function loadLogs() {
+    const res = await fetch('/logs');
+    const logs = await res.json();
+    const table = document.getElementById('logTable');
+    table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>';
+    logs.reverse().forEach(log => {
+      const row = document.createElement('tr');
+      row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
+      table.appendChild(row);
+    });
+  }
+
+  function refreshImage() {
+    const img = document.getElementById('camera');
+    img.src = '/latest.jpg?t=' + new Date().getTime(); // 防止快取
+  }
+
+  async function loadLogTimestamp() {
+    try {
+      const res = await fetch('/log.txt');
+      const text = await res.text();
+      const lines = text.trim().split('\n');
+      const latest = lines[lines.length - 1]; // 取最後一行
+      document.getElementById('logContent').textContent = latest;
+    } catch (e) {
+      document.getElementById('logContent').textContent = '⚠️ 無法載入上傳時間';
     }
+  }
 
-    function refreshImage() {
-      const img = document.getElementById('camera');
-      img.src = '/latest.jpg?t=' + new Date().getTime(); // 防止快取
-    }
+  // 初始載入
+  loadLogs();
+  refreshImage();
+  loadLogTimestamp();
 
-    async function loadLogTimestamp() {
-      try {
-        const res = await fetch('/log.txt');
-        const text = await res.text();
-        const lines = text.trim().split('\n');
-        const latest = lines[lines.length - 1]; // 取最後一行
-        document.getElementById('logContent').textContent = latest;
-      } catch (e) {
-        document.getElementById('logContent').textContent = '⚠️ 無法載入上傳時間';
-      }
-    }
-
-    // 初始載入
+  // 每5秒刷新
+  setInterval(() => {
     loadLogs();
     refreshImage();
     loadLogTimestamp();
-
-    // 每5秒刷新
-    setInterval(() => {
-      loadLogs();
-      refreshImage();
-      loadLogTimestamp();
-    }, 5000);
+  }, 5000);
 </script>
-
-  <h3>最後上傳時間</h3>
-  <pre id="logContent">載入中...</pre>
 
 </body>
 </html>
+
 
