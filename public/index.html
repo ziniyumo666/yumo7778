@@ -28,10 +28,7 @@
       const logs = await res.json();
       const table = document.getElementById('logTable');
 
-      // 清空舊資料
       table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>';
-
-      // 反轉 logs，最新在上面
       logs.reverse().forEach(log => {
         const row = document.createElement('tr');
         row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
@@ -41,19 +38,34 @@
 
     function refreshImage() {
       const img = document.getElementById('camera');
-      img.src = '/latest.jpg?t=' + new Date().getTime();  // 加時間參數防止快取
+      img.src = '/latest.jpg?t=' + new Date().getTime(); // 防止快取
     }
 
-    // 一開始就載入一次
+    async function loadLogTimestamp() {
+      try {
+        const res = await fetch('/log.txt');
+        const text = await res.text();
+        const lines = text.trim().split('\n');
+        const latest = lines[lines.length - 1]; // 取最後一行
+        document.getElementById('logContent').textContent = latest;
+      } catch (e) {
+        document.getElementById('logContent').textContent = '⚠️ 無法載入上傳時間';
+      }
+    }
+
+    // 初始載入
     loadLogs();
     refreshImage();
+    loadLogTimestamp();
 
-    // 每5秒更新一次紀錄和照片
+    // 每5秒刷新
     setInterval(() => {
       loadLogs();
       refreshImage();
+      loadLogTimestamp();
     }, 5000);
-  </script>
+</script>
+
   <h3>最後上傳時間</h3>
   <pre id="logContent">載入中...</pre>
 
