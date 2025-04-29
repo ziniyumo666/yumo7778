@@ -25,7 +25,7 @@ app.use(express.static('public')); // 提供 index.html 和 latest.jpg
 const upload = multer({ storage: multer.memoryStorage() });
 
 // ✅ 接收 ESP32-CAM 上傳的圖片
-const fs = require('fs');
+
 const path = require('path');
 
 app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), (req, res) => {
