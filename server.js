@@ -25,11 +25,27 @@ app.use(express.static('public')); // 提供 index.html 和 latest.jpg
 const upload = multer({ storage: multer.memoryStorage() });
 
 // ✅ 接收 ESP32-CAM 上傳的圖片
+const fs = require('fs');
+const path = require('path');
+
 app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), (req, res) => {
-  fs.writeFileSync('public/latest.jpg', req.body);
-  console.log('✅ 已收到並存好圖片');
-  res.send('Image uploaded successfully.');
+  const imagePath = path.join(__dirname, 'public', 'latest.jpg');
+  const logPath = path.join(__dirname, 'public', 'log.txt');
+
+  // 儲存圖片
+  fs.writeFileSync(imagePath, req.body);
+
+  // 建立時間戳記
+  const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+  const logLine = `📸 圖片上傳成功：${time}\n`;
+
+  // 附加寫入 log 檔案
+  fs.appendFileSync(logPath, logLine);
+
+  console.log(logLine.trim());
+  res.send('Image uploaded and time logged.');
 });
+
 
 // ✅ 收到傾倒事件上傳，記錄並寄信
 app.post('/upload', (req, res) => {
