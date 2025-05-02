@@ -2,12 +2,13 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const multer = require('multer');
 const fs = require('fs');
+const path = require('path');
 const nodemailer = require('nodemailer');
 
 const app = express();
 const logs = [];
 
-// ✅ 建立寄信 transporter（記得用雙引號）
+// ✅ 建立寄信 transporter
 const transporter = nodemailer.createTransport({
   host: "mail.sausagee.party",
   port: 587,
@@ -18,43 +19,38 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+// ✅ 基本中介軟體與靜態路徑
 app.use(bodyParser.json());
-app.use(express.static('public')); // 提供 index.html 和 latest.jpg
+app.use(express.static('public'));
 
-// ✅ 設定 multer 來接收圖片
-const upload = multer({ storage: multer.memoryStorage() });
-
-// ✅ 接收 ESP32-CAM 上傳的圖片
-
-const path = require('path');
-
+// ✅ 接收 ESP32-CAM 上傳的影像資料
 app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), (req, res) => {
   const imagePath = path.join(__dirname, 'public', 'latest.jpg');
   const logPath = path.join(__dirname, 'public', 'log.txt');
 
-  // 儲存圖片
+  // 寫入圖片
   fs.writeFileSync(imagePath, req.body);
 
-  // 建立時間戳記
+  // 加上時間戳記
   const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
   const logLine = `📸 圖片上傳成功：${time}\n`;
-
-  // 附加寫入 log 檔案
   fs.appendFileSync(logPath, logLine);
 
   console.log(logLine.trim());
   res.send('Image uploaded and time logged.');
 });
 
-
-// ✅ 收到傾倒事件上傳，記錄並寄信
+// ✅ 接收傾倒事件並記錄、寄信
 app.post('/upload', (req, res) => {
   const { event } = req.body;
   const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
   logs.push({ event, time });
+
+  // ✅ 最多只保留 20 筆資料
+  if (logs.length > 20) logs.shift();
+
   console.log("📥 收到傾倒事件：", event, time);
 
-  // 建立寄信內容
   const mailOptions = {
     from: 'wheelchair@sausagee.party',
     to: ['siniyumo666@gmail.com', 'ray2017good@gmail.com'],
@@ -73,7 +69,31 @@ app.post('/upload', (req, res) => {
   res.send('OK');
 });
 
-// ✅ 讀取傾倒事件紀錄
+// ✅ 接收模型預測結果並寄信
+app.post('/predict-result', (req, res) => {
+  const { result, confidence } = req.body;
+  const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+  console.log(`🤖 收到模型預測：${result}, 信心值：${confidence}`);
+
+  const mailOptions = {
+    from: 'wheelchair@sausagee.party',
+    to: ['siniyumo666@gmail.com', 'ray2017good@gmail.com'],
+    subject: `🤖 模型辨識結果通知`,
+    text: `辨識到手勢：「${result}」\n信心值：${confidence}\n時間：${time}`
+  };
+
+  transporter.sendMail(mailOptions, (error, info) => {
+    if (error) {
+      console.error("❌ 發信失敗（模型辨識）：", error);
+    } else {
+      console.log("✅ 模型辨識發信成功：" + info.response);
+    }
+  });
+
+  res.send('Result received and email sent.');
+});
+
+// ✅ 提供傾倒紀錄資料給前端
 app.get('/logs', (req, res) => {
   res.json(logs);
 });
@@ -82,6 +102,5 @@ app.get('/logs', (req, res) => {
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
   console.log('🚀 Server is running...');
 });
-
 
 
