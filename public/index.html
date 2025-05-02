@@ -80,7 +80,6 @@
     }
   </style>
 </head>
-
 <body>
   <header>
     <h1>輪椅傾倒辨識與即時影像系統</h1>
@@ -99,7 +98,7 @@
     <h2>最後上傳時間</h2>
     <pre id="logContent">載入中...</pre>
 
-    <h2>即時模型辨識結果</h2>
+    <h2>模型辨識結果</h2>
     <div id="status">尚未載入模型</div>
     <div>預測結果：<strong id="prediction">-</strong></div>
     <div>信心值：<strong id="confidence">-</strong></div>
@@ -114,7 +113,6 @@
   const IMAGE_WIDTH = 128;
   const IMAGE_HEIGHT = 128;
   const GESTURE_CLASSES = ['1', '2', '3', '4', '5'];
-
   let model;
 
   async function loadModel() {
@@ -138,8 +136,22 @@
     const data = await prediction.data();
     const index = tf.argMax(prediction, 1).dataSync()[0];
     prediction.dispose();
-    document.getElementById('prediction').innerText = GESTURE_CLASSES[index];
-    document.getElementById('confidence').innerText = (data[index] * 100).toFixed(2) + '%';
+
+    const predictedClass = GESTURE_CLASSES[index];
+    const confidence = data[index];
+
+    document.getElementById('prediction').innerText = predictedClass;
+    document.getElementById('confidence').innerText = (confidence * 100).toFixed(2) + '%';
+
+    // 傳送辨識結果到伺服器
+    fetch('/predict-result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        result: predictedClass,
+        confidence: (confidence * 100).toFixed(2) + '%'
+      })
+    });
   }
 
   async function loadLogs() {
@@ -192,5 +204,3 @@
 </script>
 </body>
 </html>
-
-
