@@ -2,8 +2,9 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>輪椅傾倒紀錄與即時影像</title>
+  <title>輪椅傾倒辨識與影像系統</title>
   <link rel="icon" href="/io.png" type="image/png" />
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -67,6 +68,10 @@
       font-size: 16px;
       color: #333;
     }
+    #prediction, #confidence {
+      font-size: 18px;
+      margin-top: 10px;
+    }
     footer {
       margin-top: 30px;
       padding: 10px;
@@ -78,7 +83,7 @@
 
 <body>
   <header>
-    <h1>輪椅傾倒紀錄與即時影像系統</h1>
+    <h1>輪椅傾倒辨識與即時影像系統</h1>
   </header>
 
   <main>
@@ -89,9 +94,15 @@
 
     <h2>即時影像</h2>
     <img id="camera" src="/latest.jpg" alt="Loading image..." />
+    <img id="esp32Image" src="/latest.jpg" style="display:none;" crossorigin="anonymous" />
 
     <h2>最後上傳時間</h2>
     <pre id="logContent">載入中...</pre>
+
+    <h2>即時模型辨識結果</h2>
+    <div id="status">尚未載入模型</div>
+    <div>預測結果：<strong id="prediction">-</strong></div>
+    <div>信心值：<strong id="confidence">-</strong></div>
   </main>
 
   <footer>
@@ -99,6 +110,38 @@
   </footer>
 
 <script>
+  const MODEL_URL = '/model/model.json';
+  const IMAGE_WIDTH = 128;
+  const IMAGE_HEIGHT = 128;
+  const GESTURE_CLASSES = ['1', '2', '3', '4', '5'];
+
+  let model;
+
+  async function loadModel() {
+    document.getElementById('status').innerText = '正在載入模型...';
+    model = await tf.loadGraphModel(MODEL_URL);
+    document.getElementById('status').innerText = '✅ 模型已載入';
+  }
+
+  function preprocessImage(imageElement) {
+    return tf.tidy(() => {
+      const tensor = tf.browser.fromPixels(imageElement);
+      const resized = tf.image.resizeBilinear(tensor, [IMAGE_HEIGHT, IMAGE_WIDTH]);
+      const normalized = resized.sub(127.5).div(127.5);
+      return normalized.expandDims(0);
+    });
+  }
+
+  async function predictImage(imgEl) {
+    const tensor = preprocessImage(imgEl);
+    const prediction = await model.predict(tensor);
+    const data = await prediction.data();
+    const index = tf.argMax(prediction, 1).dataSync()[0];
+    prediction.dispose();
+    document.getElementById('prediction').innerText = GESTURE_CLASSES[index];
+    document.getElementById('confidence').innerText = (data[index] * 100).toFixed(2) + '%';
+  }
+
   async function loadLogs() {
     const res = await fetch('/logs');
     const logs = await res.json();
@@ -112,8 +155,11 @@
   }
 
   function refreshImage() {
-    const img = document.getElementById('camera');
-    img.src = '/latest.jpg?t=' + new Date().getTime(); // 防止快取
+    const cam = document.getElementById('camera');
+    const hidden = document.getElementById('esp32Image');
+    const timestamp = new Date().getTime();
+    cam.src = '/latest.jpg?t=' + timestamp;
+    hidden.src = '/latest.jpg?t=' + timestamp;
   }
 
   async function loadLogTimestamp() {
@@ -121,26 +167,29 @@
       const res = await fetch('/log.txt');
       const text = await res.text();
       const lines = text.trim().split('\n');
-      const latest = lines[lines.length - 1]; // 取最後一行
+      const latest = lines[lines.length - 1];
       document.getElementById('logContent').textContent = latest;
     } catch (e) {
       document.getElementById('logContent').textContent = '⚠️ 無法載入上傳時間';
     }
   }
 
-  // 初始載入
-  loadLogs();
-  refreshImage();
-  loadLogTimestamp();
-
-  // 每5秒刷新
-  setInterval(() => {
+  async function main() {
+    await loadModel();
     loadLogs();
     refreshImage();
     loadLogTimestamp();
-  }, 1000);
-</script>
+    setInterval(() => {
+      loadLogs();
+      refreshImage();
+      loadLogTimestamp();
+      const imgEl = document.getElementById('esp32Image');
+      if (imgEl.complete) predictImage(imgEl);
+    }, 5000);
+  }
 
+  main();
+</script>
 </body>
 </html>
 
