@@ -155,35 +155,35 @@ async function predictImage(imgEl) {
     console.log("✅ 預測完成：", predictedClass, confidence);
 
     // 顯示正在傳送
-    document.getElementById('serverStatus').innerText = '🔄 傳送中...';
+    if (confidence > 0.5) {
+  // ✅ 信心值大於 50%，才傳送
+  document.getElementById('serverStatus').innerText = '🔄 傳送中...';
 
-    // 傳送至伺服器
-    fetch('/predict-result', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        result: predictedClass,
-        confidence: (confidence * 100).toFixed(2) + '%'
-      })
+  fetch('/predict-result', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      result: predictedClass,
+      confidence: (confidence * 100).toFixed(2) + '%'
     })
-      .then(res => {
-        if (!res.ok) throw new Error(`伺服器錯誤：${res.status}`);
-        return res.text();
-      })
-      .then(txt => {
-        console.log("📩 伺服器回應：", txt);
-        document.getElementById('serverStatus').innerText = '✅ 已傳送結果至伺服器並嘗試寄信';
-      })
-      .catch(err => {
-        console.error("❌ 傳送錯誤：", err);
-        document.getElementById('serverStatus').innerText = '❌ 傳送失敗，請查看 Console';
-      });
+  })
+    .then(res => {
+      if (!res.ok) throw new Error(`伺服器錯誤：${res.status}`);
+      return res.text();
+    })
+    .then(txt => {
+      console.log("📩 伺服器回應：", txt);
+      document.getElementById('serverStatus').innerText = '✅ 已傳送結果至伺服器並嘗試寄信';
+    })
+    .catch(err => {
+      console.error("❌ 傳送錯誤：", err);
+      document.getElementById('serverStatus').innerText = '❌ 傳送失敗，請查看 Console';
+    });
 
-  } catch (e) {
-    console.error("❌ 預測錯誤：", e);
-    document.getElementById('serverStatus').innerText = '❌ 預測錯誤';
-  }
+} else {
+  document.getElementById('serverStatus').innerText = '⚠️ 信心值不足（低於 50%），未傳送';
 }
+
 
 
 
