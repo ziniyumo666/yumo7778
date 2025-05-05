@@ -20,9 +20,6 @@
       margin-bottom: 30px;
       box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
-    h1, h2, h3 {
-      margin: 10px 0;
-    }
     main {
       max-width: 1000px;
       margin: auto;
@@ -35,8 +32,6 @@
       width: 90%;
       margin: 20px auto;
       border-collapse: collapse;
-      background-color: #fff;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
     th, td {
       padding: 12px;
@@ -58,19 +53,24 @@
       border-radius: 10px;
       box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
-    #logContent {
+    #logContent, #imageTime {
       background: #eef1f5;
       padding: 10px;
       border-radius: 6px;
-      display: inline-block;
       margin-top: 10px;
       font-family: 'Courier New', Courier, monospace;
       font-size: 16px;
       color: #333;
+      display: inline-block;
     }
     #prediction, #confidence {
       font-size: 18px;
       margin-top: 10px;
+    }
+    #serverStatus {
+      margin-top: 10px;
+      font-size: 16px;
+      color: #555;
     }
     footer {
       margin-top: 30px;
@@ -84,7 +84,6 @@
   <header>
     <h1>輪椅傾倒辨識與即時影像系統</h1>
   </header>
-
   <main>
     <h2>傾倒事件紀錄</h2>
     <table id="logTable">
@@ -92,8 +91,9 @@
     </table>
 
     <h2>即時影像</h2>
-    <img id="camera" src="/latest.jpg" alt="Loading image..." />
+    <img id="camera" src="/latest.jpg" alt="Loading image...">
     <img id="esp32Image" src="/latest.jpg" style="display:none;" crossorigin="anonymous" />
+    <div id="imageTime">圖片更新時間：-</div>
 
     <h2>最後上傳時間</h2>
     <pre id="logContent">載入中...</pre>
@@ -102,44 +102,38 @@
     <div id="status">尚未載入模型</div>
     <div>預測結果：<strong id="prediction">-</strong></div>
     <div>信心值：<strong id="confidence">-</strong></div>
-    <div id="serverStatus" style="margin-top: 10px; font-size: 16px; color: #555;">
-  
-</div>
-
+    <div id="serverStatus">-</div>
   </main>
-
   <footer>
     Powered by ESP32-CAM ｜ Sausagee Party Server
   </footer>
 
 <script>
-  const MODEL_URL = '/model/model.json';
-  const IMAGE_WIDTH = 128;
-  const IMAGE_HEIGHT = 128;
-  const GESTURE_CLASSES = ['1', '2', '3', '4', '5'];
-  let model;
+const MODEL_URL = '/model/model.json';
+const IMAGE_WIDTH = 128;
+const IMAGE_HEIGHT = 128;
+const GESTURE_CLASSES = ['1', '2', '3', '4', '5'];
+let model;
 
-  async function loadModel() {
-    document.getElementById('status').innerText = '正在載入模型...';
-    model = await tf.loadGraphModel(MODEL_URL);
-    document.getElementById('status').innerText = '✅ 模型已載入';
-  }
+async function loadModel() {
+  document.getElementById('status').innerText = '正在載入模型...';
+  model = await tf.loadGraphModel(MODEL_URL);
+  document.getElementById('status').innerText = '✅ 模型已載入';
+}
 
-  function preprocessImage(imageElement) {
-    return tf.tidy(() => {
-      const tensor = tf.browser.fromPixels(imageElement);
-      const resized = tf.image.resizeBilinear(tensor, [IMAGE_HEIGHT, IMAGE_WIDTH]);
-      const normalized = resized.sub(127.5).div(127.5);
-      return normalized.expandDims(0);
-    });
-  }
+function preprocessImage(imageElement) {
+  return tf.tidy(() => {
+    const tensor = tf.browser.fromPixels(imageElement);
+    const resized = tf.image.resizeBilinear(tensor, [IMAGE_HEIGHT, IMAGE_WIDTH]);
+    const normalized = resized.sub(127.5).div(127.5);
+    return normalized.expandDims(0);
+  });
+}
 
 async function predictImage(imgEl) {
   console.log("🧠 開始預測...");
   try {
     const tensor = preprocessImage(imgEl);
-    console.log("📦 Tensor shape:", tensor.shape);
-
     const prediction = await model.predict(tensor);
     const data = await prediction.data();
     const index = tf.argMax(prediction, 1).dataSync()[0];
@@ -148,106 +142,97 @@ async function predictImage(imgEl) {
     const predictedClass = GESTURE_CLASSES[index];
     const confidence = data[index];
 
-    // 顯示預測結果
     document.getElementById('prediction').innerText = predictedClass;
     document.getElementById('confidence').innerText = (confidence * 100).toFixed(2) + '%';
 
     console.log("✅ 預測完成：", predictedClass, confidence);
-
-
-
-    // 顯示正在傳送
-    if (confidence > 0.5) {
-  // ✅ 信心值大於 50%，才傳送
-  document.getElementById('serverStatus').innerText = '🔄 傳送中...';
-
-  fetch('/predict-result', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      result: predictedClass,
-      confidence: (confidence * 100).toFixed(2) + '%'
-    })
-  })
-    .then(res => {
-      if (!res.ok) throw new Error(`伺服器錯誤：${res.status}`);
-      return res.text();
-    })
-    .then(txt => {
-      console.log("📩 伺服器回應：", txt);
-      document.getElementById('serverStatus').innerText = '✅ 已傳送結果至伺服器並嘗試寄信';
-    })
-    .catch(err => {
-      console.error("❌ 傳送錯誤：", err);
-      document.getElementById('serverStatus').innerText = '❌ 傳送失敗，請查看 Console';
+    console.log("🔬 模型輸出所有分類機率：");
+    GESTURE_CLASSES.forEach((label, i) => {
+      console.log(`${label}: ${(data[i] * 100).toFixed(2)}%`);
     });
 
-} else {
-  document.getElementById('serverStatus').innerText = '⚠️ 信心值不足（低於 50%），未傳送';
+    if (confidence > 0.5) {
+      document.getElementById('serverStatus').innerText = '🔄 傳送中...';
+      fetch('/predict-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          result: predictedClass,
+          confidence: (confidence * 100).toFixed(2) + '%'
+        })
+      })
+        .then(res => res.text())
+        .then(txt => {
+          console.log("📩 伺服器回應：", txt);
+          document.getElementById('serverStatus').innerText = '✅ 已傳送結果至伺服器並嘗試寄信';
+        })
+        .catch(err => {
+          console.error("❌ 傳送錯誤：", err);
+          document.getElementById('serverStatus').innerText = '❌ 傳送失敗';
+        });
+    } else {
+      document.getElementById('serverStatus').innerText = '⚠️ 信心值不足，未傳送';
+    }
+  } catch (e) {
+    console.error("❌ 預測錯誤：", e);
+    document.getElementById('serverStatus').innerText = '❌ 預測錯誤';
+  }
 }
 
+async function loadLogs() {
+  const res = await fetch('/logs');
+  const logs = await res.json();
+  const table = document.getElementById('logTable');
+  table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>';
+  logs.reverse().forEach(log => {
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
+    table.appendChild(row);
+  });
+}
 
-
-
-  async function loadLogs() {
-    const res = await fetch('/logs');
-    const logs = await res.json();
-    const table = document.getElementById('logTable');
-    table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>';
-    logs.reverse().forEach(log => {
-      const row = document.createElement('tr');
-      row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
-      table.appendChild(row);
-    });
-  }
 function refreshImage() {
   const cam = document.getElementById('camera');
   const hidden = document.getElementById('esp32Image');
   const timestamp = new Date().getTime();
   const url = '/latest.jpg?t=' + timestamp;
-
   cam.src = url;
   hidden.src = url;
-
+  document.getElementById('imageTime').innerText = '圖片更新時間：' + new Date().toLocaleTimeString();
   hidden.onload = () => {
     console.log("✅ 圖片 onload 觸發，開始預測");
     predictImage(hidden);
   };
-
   hidden.onerror = () => {
     console.warn("🚫 圖片載入錯誤（可能尚未上傳或 404）");
   };
 }
 
-
-
-  async function loadLogTimestamp() {
-    try {
-      const res = await fetch('/log.txt');
-      const text = await res.text();
-      const lines = text.trim().split('\n');
-      const latest = lines[lines.length - 1];
-      document.getElementById('logContent').textContent = latest;
-    } catch (e) {
-      document.getElementById('logContent').textContent = '⚠️ 無法載入上傳時間';
-    }
+async function loadLogTimestamp() {
+  try {
+    const res = await fetch('/log.txt');
+    const text = await res.text();
+    const lines = text.trim().split('\n');
+    const latest = lines[lines.length - 1];
+    document.getElementById('logContent').textContent = latest;
+  } catch (e) {
+    document.getElementById('logContent').textContent = '⚠️ 無法載入上傳時間';
   }
+}
 
-  async function main() {
-    await loadModel();
+async function main() {
+  await loadModel();
+  loadLogs();
+  refreshImage();
+  loadLogTimestamp();
+  setInterval(() => {
     loadLogs();
     refreshImage();
     loadLogTimestamp();
-    setInterval(() => {
-      loadLogs();
-      refreshImage();
-      loadLogTimestamp();
-      const imgEl = document.getElementById('esp32Image');
-      if (imgEl.complete) predictImage(imgEl);
-    }, 5000);
-  }
+  }, 5000);
+}
 
-  main();
+main();
 </script>
 </body>
 </html>
