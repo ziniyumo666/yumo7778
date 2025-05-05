@@ -153,10 +153,7 @@ async function predictImage(imgEl) {
     document.getElementById('confidence').innerText = (confidence * 100).toFixed(2) + '%';
 
     console.log("✅ 預測完成：", predictedClass, confidence);
-    console.log("🔬 模型輸出所有分類機率：");
-GESTURE_CLASSES.forEach((label, i) => {
-  console.log(`${label}: ${(data[i] * 100).toFixed(2)}%`);
-});
+
 
 
     // 顯示正在傳送
