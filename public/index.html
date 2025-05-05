@@ -130,8 +130,12 @@
     });
   }
 
-  async function predictImage(imgEl) {
+async function predictImage(imgEl) {
+  try {
+    console.log("🧠 開始預測...");
     const tensor = preprocessImage(imgEl);
+    console.log("📦 Tensor shape:", tensor.shape);
+
     const prediction = await model.predict(tensor);
     const data = await prediction.data();
     const index = tf.argMax(prediction, 1).dataSync()[0];
@@ -143,16 +147,14 @@
     document.getElementById('prediction').innerText = predictedClass;
     document.getElementById('confidence').innerText = (confidence * 100).toFixed(2) + '%';
 
-    // 傳送辨識結果到伺服器
-    fetch('/predict-result', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        result: predictedClass,
-        confidence: (confidence * 100).toFixed(2) + '%'
-      })
-    });
+    console.log("✅ 預測完成：", predictedClass, confidence);
+  } catch (e) {
+    console.error("❌ 預測過程中發生錯誤：", e);
+    document.getElementById('prediction').innerText = '錯誤';
+    document.getElementById('confidence').innerText = '-';
   }
+}
+
 
   async function loadLogs() {
     const res = await fetch('/logs');
@@ -165,14 +167,26 @@
       table.appendChild(row);
     });
   }
+function refreshImage() {
+  const cam = document.getElementById('camera');
+  const hidden = document.getElementById('esp32Image');
+  const timestamp = new Date().getTime();
+  const url = '/latest.jpg?t=' + timestamp;
 
-  function refreshImage() {
-    const cam = document.getElementById('camera');
-    const hidden = document.getElementById('esp32Image');
-    const timestamp = new Date().getTime();
-    cam.src = '/latest.jpg?t=' + timestamp;
-    hidden.src = '/latest.jpg?t=' + timestamp;
-  }
+  cam.src = url;
+  hidden.src = url;
+
+  hidden.onload = () => {
+    console.log("✅ 圖片 onload 觸發，開始預測");
+    predictImage(hidden);
+  };
+
+  hidden.onerror = () => {
+    console.warn("🚫 圖片載入錯誤（可能尚未上傳或 404）");
+  };
+}
+
+
 
   async function loadLogTimestamp() {
     try {
