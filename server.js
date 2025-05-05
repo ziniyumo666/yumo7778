@@ -63,6 +63,7 @@ app.post('/upload', (req, res) => {
       console.error("❌ 發信失敗：", error);
     } else {
       console.log("✅ 發信成功：" + info.response);
+      return res.send("Email 已發送：" + info.response);
     }
   });
 
