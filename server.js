@@ -9,13 +9,12 @@ const app = express();
 const logs = [];
 
 // ✅ 建立寄信 transporter
+
 const transporter = nodemailer.createTransport({
-  host: "mail.sausagee.party",
-  port: 587,
-  secure: false,
+  service: 'gmail',
   auth: {
-    user: "wheelchair@sausagee.party",
-    pass: "sausage12345"
+    user: 'ray2017good@gmail.com',
+    pass: 'piimtgblngmbojrv'
   }
 });
 
@@ -52,8 +51,8 @@ app.post('/upload', (req, res) => {
   console.log("📥 收到傾倒事件：", event, time);
 
   const mailOptions = {
-    from: 'wheelchair@sausagee.party',
-    to: ['siniyumo666@gmail.com', 'ray2017good@gmail.com'],
+    from: 'ray2017good@gmail.com',
+    to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'],
     subject: `📡 傾倒事件通知`,
     text: `偵測到事件：「${event}」\n發生時間：${time}`
   };
@@ -77,8 +76,8 @@ app.post('/predict-result', (req, res) => {
   console.log(`🤖 收到模型預測：${result}, 信心值：${confidence}`);
 
   const mailOptions = {
-    from: 'wheelchair@sausagee.party',
-    to: ['siniyumo666@gmail.com', 'ray2017good@gmail.com'],
+    from: 'ray2017good@gmail.com',
+    to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'],
     subject: `🤖 模型辨識結果通知`,
     text: `辨識到手勢：「${result}」\n信心值：${confidence}\n時間：${time}`
   };
