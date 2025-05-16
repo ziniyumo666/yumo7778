@@ -215,18 +215,20 @@ function refreshImage() {
 async function loadLogTimestamp() {
   try {
     const res = await fetch('/log.txt');
+    if (!res.ok) throw new Error('檔案尚未建立');
+
     const text = await res.text();
     const lines = text.trim().split('\n');
     const latest = lines[lines.length - 1];
     document.getElementById('logContent').textContent = latest;
-
-    // 新增這一行：同步更新圖片時間顯示
-    document.getElementById('imageTime').innerText = '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
+    document.getElementById('imageTime').innerText =
+      '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
   } catch (e) {
-    document.getElementById('logContent').textContent = '⚠️ 無法載入上傳時間';
-    document.getElementById('imageTime').innerText = '⚠️ 圖片時間錯誤';
+    document.getElementById('logContent').textContent = '⚠️ 尚未上傳圖片';
+    document.getElementById('imageTime').innerText = '⚠️ 尚未上傳圖片';
   }
 }
+
 
 
 async function main() {
