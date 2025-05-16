@@ -92,6 +92,15 @@ app.post('/predict-result', (req, res) => {
 
   res.send('Result received and email sent.');
 });
+app.get('/latest-image-info', (req, res) => {
+  const logPath = path.join(__dirname, 'public', 'log.txt');
+  if (!fs.existsSync(logPath)) {
+    return res.status(404).json({ error: '尚未上傳圖片' });
+  }
+  const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n');
+  const latest = lines[lines.length - 1];
+  res.json({ timestamp: latest });
+});
 
 // ✅ 提供傾倒紀錄資料給前端
 app.get('/logs', (req, res) => {
