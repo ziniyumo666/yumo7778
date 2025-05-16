@@ -214,12 +214,12 @@ function refreshImage() {
 
 async function loadLogTimestamp() {
   try {
-    const res = await fetch('/log.txt');
-    if (!res.ok) throw new Error('檔案尚未建立');
+    const res = await fetch('/latest-image-info');
+    if (!res.ok) throw new Error('尚未上傳圖片');
 
-    const text = await res.text();
-    const lines = text.trim().split('\n');
-    const latest = lines[lines.length - 1];
+    const data = await res.json();
+    const latest = data.timestamp;
+
     document.getElementById('logContent').textContent = latest;
     document.getElementById('imageTime').innerText =
       '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
@@ -228,6 +228,7 @@ async function loadLogTimestamp() {
     document.getElementById('imageTime').innerText = '⚠️ 尚未上傳圖片';
   }
 }
+
 
 
 
