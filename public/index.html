@@ -202,7 +202,7 @@ function refreshImage() {
   const url = '/latest.jpg?t=' + timestamp;
   cam.src = url;
   hidden.src = url;
-  document.getElementById('imageTime').innerText = '圖片更新時間：' + new Date().toLocaleTimeString();
+  
   hidden.onload = () => {
     console.log("✅ 圖片 onload 觸發，開始預測");
     predictImage(hidden);
@@ -219,10 +219,15 @@ async function loadLogTimestamp() {
     const lines = text.trim().split('\n');
     const latest = lines[lines.length - 1];
     document.getElementById('logContent').textContent = latest;
+
+    // 新增這一行：同步更新圖片時間顯示
+    document.getElementById('imageTime').innerText = '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
   } catch (e) {
     document.getElementById('logContent').textContent = '⚠️ 無法載入上傳時間';
+    document.getElementById('imageTime').innerText = '⚠️ 圖片時間錯誤';
   }
 }
+
 
 async function main() {
   await loadModel();
