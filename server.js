@@ -13,12 +13,6 @@ const imagePath = path.join(__dirname, 'public', 'latest.jpg');
 const logPath = path.join(__dirname, 'public', 'log.txt');
 const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
 
-let classifierReady = false;
-ei.init().then(() => {
-  classifierReady = true;
-  console.log('✅ Edge Impulse 模型已初始化');
-});
-
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -38,7 +32,7 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
     fs.appendFileSync(logPath, logLine);
     console.log(logLine.trim());
 
-    if (!classifierReady || typeof ei.classify !== 'function') throw new Error('模型尚未初始化或不支援推論');
+    if (typeof ei.classify !== 'function') throw new Error('模型 classify 函式不存在');
 
     const decoded = jpeg.decode(req.body, true);
     const { data } = decoded;
@@ -106,4 +100,3 @@ app.get('/latest-image-info', (req, res) => {
   res.json({ timestamp: lines[lines.length - 1] });
 });
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => console.log('🚀 Server is running...'));
-
