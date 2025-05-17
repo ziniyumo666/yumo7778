@@ -84,9 +84,9 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
     const data = imageData.data;
     // 假設是 RGB 數據，模型輸入通常不需要 alpha 通道
     for (let i = 0; i < data.length; i += 4) {
-      input.push(data[i]);   // R
-      input.push(data[i+1]); // G
-      input.push(data[i+2]); // B
+      input.push(data[i])/255;   // R
+      input.push(data[i+1])/255; // G
+      input.push(data[i+2])/255; // B
       // 標準化 (0-255 到 0-1) 通常由 Edge Impulse 函式庫處理或模型期望。
       // 如果你的模型期望標準化 (0-1) 的值，請在此處除以 255。
       // 範例：input.push(data[i] / 255);
