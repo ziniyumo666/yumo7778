@@ -159,5 +159,6 @@ classifier.init().then(async () => {
 }).catch(err => {
     console.error('Failed to initialize classifier', err);
 });
-module.exports = EdgeImpulseClassifier;
+module.exports = { EdgeImpulseClassifier };
+
 
