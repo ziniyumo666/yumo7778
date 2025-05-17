@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const jpeg = require('jpeg-js');
 const nodemailer = require('nodemailer');
-const EdgeImpulseClassifier = require('./node/run-impulse');
+const EdgeImpulseClassifier = require('./ei_model/run-impulse');
 
 const app = express();
 const logs = [];
