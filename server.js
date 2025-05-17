@@ -1,79 +1,124 @@
 // server.js
 const express = require('express');
 const bodyParser = require('body-parser');
-const multer = require('multer');
+// const multer = require('multer'); // multer 在此版本中未使用，可以移除或註解掉
 const fs = require('fs');
 const path = require('path');
-const jpeg = require('jpeg-js');
+// const jpeg = require('jpeg-js'); // jpeg-js 在此版本中未使用，可以移除或註解掉
 const nodemailer = require('nodemailer');
 const EdgeImpulseClassifier = require('./ei_model/run-impulse'); // 修改：導入類別
 const { createCanvas, loadImage } = require('canvas');
 
 const app = express();
-const logs = [];
+const logs = []; // 用於儲存傾倒事件日誌
 
-let classifier = null;
-(async () => {
-  try {
-    // classifier = await runImpulse(); // 移除這一行 (這一行就是造成錯誤的第18行)
-    
-    // 修改：實例化並初始化分類器
-    if (typeof EdgeImpulseClassifier !== 'function') {
-      console.error('❌ EdgeImpulseClassifier 不是一個建構函數。載入的模組：', EdgeImpulseClassifier);
-      throw new Error('載入 EdgeImpulseClassifier 失敗。請檢查 ei_model/run-impulse.js 是否正確導出。');
-    }
-    classifier = new EdgeImpulseClassifier();
-    await classifier.init(); // init() 是 EdgeImpulseClassifier 類別中的一個異步方法
-    console.log('✅ 模型初始化完成');
-  } catch (err) {
-    console.error('❌ 模型初始化失敗：', err);
-  }
-})();
+// 全局分類器實例 - 注意：在診斷版本中，我們會在路由內部創建臨時實例
+// let classifier = null;
+// (async () => {
+//   try {
+//     if (typeof EdgeImpulseClassifier !== 'function') {
+//       console.error('❌ EdgeImpulseClassifier 不是一個建構函數。載入的模組：', EdgeImpulseClassifier);
+//       throw new Error('載入 EdgeImpulseClassifier 失敗。請檢查 ei_model/run-impulse.js 是否正確導出。');
+//     }
+//     classifier = new EdgeImpulseClassifier();
+//     await classifier.init(); // init() 是 EdgeImpulseClassifier 類別中的一個異步方法
+//     console.log('✅ 全局模型初始化完成');
+//   } catch (err) {
+//     console.error('❌ 全局模型初始化失敗：', err);
+//   }
+// })();
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'ray2017good@gmail.com',
-    pass: 'piimtgblngmbojrv' // 建議使用環境變數來管理憑證
+    user: 'ray2017good@gmail.com', // 您的 Gmail 地址
+    pass: 'piimtgblngmbojrv'    // 您的 Gmail 應用程式密碼
+                                  // 建議使用環境變數來管理憑證
   }
 });
 
 app.use(bodyParser.json());
-app.use(express.static('public'));
+app.use(express.static('public')); // 提供 public 資料夾中的靜態檔案
 
+// 處理圖片上傳和辨識
 app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), async (req, res) => {
   const imagePath = path.join(__dirname, 'public', 'latest.jpg');
-  const logPath = path.join(__dirname, 'public', 'log.txt');
-  const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
+  const logPath = path.join(__dirname, 'public', 'log.txt'); // 圖片上傳時間日誌
+  const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json'); // 推論結果日誌
 
-  fs.writeFileSync(imagePath, req.body);
+  // 1. 保存上傳的圖片
+  try {
+    fs.writeFileSync(imagePath, req.body);
+  } catch (writeErr) {
+    console.error('❌ 保存圖片失敗:', writeErr);
+    // 即使保存失敗，也嘗試記錄推論錯誤
+    try {
+        fs.writeFileSync(inferenceLogPath, JSON.stringify({
+            label: '-',
+            value: 0,
+            error: 'Failed to save image: ' + writeErr.message,
+            errorTime: new Date().toISOString()
+        }));
+    } catch (logErr) {
+        console.error('❌ 寫入推論錯誤日誌也失敗:', logErr);
+    }
+    return res.status(500).send('Error saving image.');
+  }
+
 
   const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
   const logLine = `📸 圖片上傳成功：${time}\n`;
   fs.appendFileSync(logPath, logLine);
-  console.log(logLine.trim());
+  console.log(logLine.trim()); // 在伺服器控制台也打印日誌
+
+  // --- 診斷性修改：每次都重新初始化分類器 ---
+  let tempClassifier;
+  try {
+    console.log('🚧 [Diagnostic] Attempting to re-initialize classifier for this request...');
+    if (typeof EdgeImpulseClassifier !== 'function') {
+      const errMsg = 'EdgeImpulseClassifier is not a constructor.';
+      console.error(`❌ ${errMsg} Loaded module:`, EdgeImpulseClassifier);
+      throw new Error(errMsg);
+    }
+    tempClassifier = new EdgeImpulseClassifier();
+    await tempClassifier.init();
+    console.log('✅ [Diagnostic] Classifier re-initialized successfully for this request.');
+  } catch (initErr) {
+    console.error('❌ [Diagnostic] 模型為此請求重新初始化失敗：', initErr);
+    try {
+      fs.writeFileSync(inferenceLogPath, JSON.stringify({
+        label: '-',
+        value: 0,
+        error: 'Classifier re-initialization failed: ' + initErr.message,
+        errorTime: new Date().toISOString()
+      }));
+    } catch (logErr) {
+        console.error('❌ 寫入分類器初始化錯誤日誌失敗:', logErr);
+    }
+    return res.status(500).send('圖片已上傳，但分類器初始化失敗。');
+  }
+  // --- 診斷性修改結束 ---
 
   try {
-    if (!classifier || typeof classifier.classify !== 'function') {
-      // throw new Error('模型尚未初始化或不支援影像推論'); 
-      // 修改：如果 classifier.init() 稍早失敗，提供更具體的錯誤
-      console.error('❌ 模型尚未正確初始化，或 classifier.classify 不是一個函數。');
-      fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: '-', value: 0, error: 'Classifier not ready' }));
+    // 使用臨時（或全局，如果非診斷模式）分類器實例
+    if (!tempClassifier || typeof tempClassifier.classify !== 'function') {
+      const errMsg = '模型尚未正確初始化，或 classifier.classify 不是一個函數。';
+      console.error(`❌ ${errMsg}`);
+      fs.writeFileSync(inferenceLogPath, JSON.stringify({
+        label: '-',
+        value: 0,
+        error: 'Classifier not ready or classify is not a function',
+        errorTime: new Date().toISOString()
+      }));
       return res.status(500).send('圖片已上傳，但由於分類器問題處理失敗。');
     }
 
+    // 2. 載入並預處理圖片
     const img = await loadImage(imagePath);
-    // const MODEL_WIDTH = 96; // 這些在你的 server.js 中，但沒有直接與 Edge Impulse classify 一起使用
-    // const MODEL_HEIGHT = 96;
-
-    // Edge Impulse 模型期望一個扁平的原始特徵數據陣列。
-    // 此陣列的大小取決於模型的輸入配置 (例如，96x96 RGB = 96*96*3 = 27648 個特徵)。
-    // `run-impulse.js` 範例和分類器類別會處理從 rawData 陣列的轉換。
-    // 如果你的 `canvas` 預處理與 `classifier.classify(input)` 期望的輸入相匹配，那應該是正確的。
     
-    const projectInfo = classifier.getProjectInfo();
-    const MODEL_WIDTH = projectInfo.image_input_width || 96; // 從專案資訊獲取或預設
-    const MODEL_HEIGHT = projectInfo.image_input_height || 96; // 從專案資訊獲取或預設
+    const projectInfo = tempClassifier.getProjectInfo(); // 使用臨時分類器
+    const MODEL_WIDTH = projectInfo.image_input_width || 96;
+    const MODEL_HEIGHT = projectInfo.image_input_height || 96;
 
     const canvas = createCanvas(MODEL_WIDTH, MODEL_HEIGHT);
     const ctx = canvas.getContext('2d');
@@ -82,122 +127,156 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
 
     const input = [];
     const data = imageData.data;
-    // 假設是 RGB 數據，模型輸入通常不需要 alpha 通道
     for (let i = 0; i < data.length; i += 4) {
-      input.push(data[i]/255);   // R
-      input.push(data[i+1]/255); // G
-      input.push(data[i+2]/255); // B
-      // 標準化 (0-255 到 0-1) 通常由 Edge Impulse 函式庫處理或模型期望。
-      // 如果你的模型期望標準化 (0-1) 的值，請在此處除以 255。
-      // 範例：input.push(data[i] / 255);
-      // 目前 EdgeImpulseClassifier 類別的 _arrayToHeap 方法會創建一個 Float32Array，
-      // 因此傳送像 0-255 這樣的數字是可行的；標準化可能是內部處理或期望為原始字節值。
-      // run-impulse.js 中的範例 `features.trim().split(',').map(n => Number(n))` 表示傳遞的是數字。
-      // 對於影像數據，通常是原始像素值 (0-255) 或標準化值 (0-1)。
-      // 如果你的模型是在原始像素值上訓練的，請保持原樣。如果是標準化的，則除以 255。
-      // 目前，根據你原始程式碼結構和簡潔性，假設使用原始像素值。
-      // 在你的原始程式碼中，你將像素值除以 255 進行了標準化，所以我們這裡也這樣做。
-      // input.push(data[i] / 255); 
-      // input.push(data[i + 1] / 255);
-      // input.push(data[i + 2] / 255);
-      // 更新：根據你的程式碼，你已經進行了 /255 的標準化，所以保持這個邏輯。
+      input.push(data[i] / 255);   // R
+      input.push(data[i + 1] / 255); // G
+      input.push(data[i + 2] / 255); // B
     }
-    console.log("📏 預處理後的 input 陣列長度：", input.length); // 應該是 MODEL_WIDTH * MODEL_HEIGHT * 3
-    console.log('🔎 預處理前幾個 input：', input.slice(0, 10));
+    console.log(`[${new Date().toLocaleTimeString()}] 📏 預處理後的 input 陣列長度：`, input.length);
+    console.log(`[${new Date().toLocaleTimeString()}] 🔎 預處理前幾個 input：`, input.slice(0, 10));
 
-    const result = await classifier.classify(input); // 傳遞原始像素數據陣列
-    console.log('📊 推論結果：', result);
+    // 3. 執行辨識
+    const result = await tempClassifier.classify(input); // 使用臨時分類器
+    console.log(`[${new Date().toLocaleTimeString()}] 📊 推論結果：`, JSON.stringify(result, null, 2));
+
     if (result && result.results && result.results.length > 0) {
       result.results.sort((a, b) => b.value - a.value); // 降序排序
     }
 
     const top = result.results?.[0] || { label: '-', value: 0 };
-    fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: top.label, value: top.value, inferenceTime: new Date().toISOString() }));
+
+    // 4. 保存辨識結果
+    fs.writeFileSync(inferenceLogPath, JSON.stringify({
+      label: top.label,
+      value: top.value,
+      inferenceTime: new Date().toISOString() // 加入推論時間戳
+    }));
+
   } catch (err) {
-    console.error('❌ 圖片處理或推論錯誤：', err);
-    fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: '-', value: 0, error: err.message, errorTime: new Date().toISOString() }));
+    console.error(`[${new Date().toLocaleTimeString()}] ❌ 圖片處理或推論錯誤：`, err);
+    fs.writeFileSync(inferenceLogPath, JSON.stringify({
+      label: '-',
+      value: 0,
+      error: err.message,
+      errorTime: new Date().toISOString() // 加入錯誤時間戳
+    }));
+    // 根據情況決定是否仍要發送 200 OK，或是一個錯誤狀態碼
+    // 如果只是推論失敗，圖片本身可能已上傳，所以還是可以回 200
+    // return res.status(500).send('Image processed with error.');
   }
 
   res.send('Image uploaded and processed.');
 });
 
+// 處理傾倒事件（來自PicoW或其他設備）
 app.post('/upload', (req, res) => {
   const { event } = req.body;
   const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
   logs.push({ event, time });
-  if (logs.length > 20) logs.shift();
+  if (logs.length > 20) logs.shift(); // 保持最多20條日誌
 
-  console.log("📥 收到傾倒事件：", event, time);
+  console.log(`[${new Date().toLocaleTimeString()}] 📥 收到傾倒事件：`, event, time);
 
   const mailOptions = {
     from: 'ray2017good@gmail.com',
-    to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'],
-    subject: `📡 傾倒事件通知`,
+    to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'], // 收件人列表
+    subject: `📡 傾倒事件通知 (${event})`, // 主旨中加入事件類型
     text: `偵測到事件：「${event}」\n發生時間：${time}`
   };
 
   transporter.sendMail(mailOptions, (error, info) => {
     if (error) {
-      console.error("❌ 發信失敗：", error);
+      console.error(`[${new Date().toLocaleTimeString()}] ❌ 發信失敗（傾倒事件）：`, error);
     } else {
-      console.log("✅ 發信成功：" + info.response);
+      console.log(`[${new Date().toLocaleTimeString()}] ✅ 傾倒事件發信成功：` + info.response);
     }
   });
 
   res.send('OK');
 });
 
+// (可選) 處理來自客戶端或其他服務的模型辨識結果通知 (如果有的話)
 app.post('/predict-result', (req, res) => {
   const { result, confidence } = req.body;
   const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-  console.log(`🤖 收到模型預測：${result}, 信心值：${confidence}`);
+  console.log(`[${new Date().toLocaleTimeString()}] 🤖 收到模型預測（外部）：${result}, 信心值：${confidence}`);
 
   const mailOptions = {
     from: 'ray2017good@gmail.com',
     to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'],
-    subject: `🤖 模型辨識結果通知`,
+    subject: `🤖 模型辨識結果通知 (外部)`,
     text: `辨識到手勢：「${result}」\n信心值：${confidence}\n時間：${time}`
   };
 
   transporter.sendMail(mailOptions, (error, info) => {
     if (error) {
-      console.error("❌ 發信失敗（模型辨識）：", error);
+      console.error(`[${new Date().toLocaleTimeString()}] ❌ 發信失敗（模型辨識 - 外部）：`, error);
     } else {
-      console.log("✅ 模型辨識發信成功：" + info.response);
+      console.log(`[${new Date().toLocaleTimeString()}] ✅ 模型辨識發信成功（外部）：` + info.response);
     }
   });
 
   res.send('Result received and email sent.');
 });
 
+
+// 提供最新的圖片上傳時間資訊
 app.get('/latest-image-info', (req, res) => {
   const logPath = path.join(__dirname, 'public', 'log.txt');
   if (!fs.existsSync(logPath)) {
     return res.status(404).json({ error: '尚未上傳圖片' });
   }
-  const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n');
-  const latest = lines[lines.length - 1];
-  res.json({ timestamp: latest });
+  try {
+    const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n');
+    const latest = lines.length > 0 ? lines[lines.length - 1] : '無上傳紀錄';
+    res.json({ timestamp: latest });
+  } catch (readErr) {
+    console.error('❌ 讀取圖片上傳日誌失敗:', readErr);
+    res.status(500).json({ error: '無法讀取日誌' });
+  }
 });
 
+// 提供傾倒事件日誌
 app.get('/logs', (req, res) => {
   res.json(logs);
 });
 
+// 提供最新的推論結果
 app.get('/inference-log.json', (req, res) => {
   const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
   if (!fs.existsSync(inferenceLogPath)) {
-    return res.status(404).json({ label: '-', value: 0, error: 'Inference log not found' });
+    return res.status(404).json({ label: '-', value: 0, error: 'Inference log not found', errorTime: new Date().toISOString() });
   }
-  const data = fs.readFileSync(inferenceLogPath, 'utf8');
-  res.setHeader('Content-Type', 'application/json');
-  // 新增：強制無快取的標頭
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.send(data);
+  try {
+    const data = fs.readFileSync(inferenceLogPath, 'utf8');
+    res.setHeader('Content-Type', 'application/json');
+    // 強制無快取的標頭
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.send(data);
+  } catch (readErr) {
+    console.error('❌ 讀取推論日誌失敗:', readErr);
+    res.status(500).json({ label: '-', value: 0, error: 'Failed to read inference log', errorTime: new Date().toISOString() });
+  }
 });
 
-app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('🚀 Server is running...');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server is running on port ${PORT}...`);
+  // 應用啟動時，如果 inference-log.json 不存在，可以創建一個初始的
+  const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
+  if (!fs.existsSync(inferenceLogPath)) {
+    try {
+        fs.writeFileSync(inferenceLogPath, JSON.stringify({
+            label: '-',
+            value: 0,
+            status: 'Server started, no inference yet.',
+            inferenceTime: new Date().toISOString()
+        }));
+        console.log('ℹ️ Initial inference-log.json created.');
+    } catch(initLogErr) {
+        console.error('❌ 創建初始 inference-log.json 失敗:', initLogErr);
+    }
+  }
 });
