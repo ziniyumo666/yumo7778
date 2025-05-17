@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <title>輪椅傾倒辨識與影像系統</title>
   <link rel="icon" href="/io.png" type="image/png" />
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
+  <script src="/ei_model/edge-impulse-standalone.js"></script>
+  <script src="/ei_model/run_impulse.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -53,7 +54,7 @@
       border-radius: 10px;
       box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
-    #logContent,#imageTime {
+    #logContent, #imageTime {
       background: #eef1f5;
       padding: 10px;
       border-radius: 6px;
@@ -61,12 +62,11 @@
       font-family: 'Courier New', Courier, monospace;
       font-size: 16px;
       color: #333;
-      display: block;       /* 改為 block 使其自動換行 */
-      text-align: center;   /* 置中文字 */
-      margin-left: auto;    /* 水平置中用 */
+      display: block;
+      text-align: center;
+      margin-left: auto;
       margin-right: auto;
     }
-
     #prediction, #confidence {
       font-size: 18px;
       margin-top: 10px;
@@ -103,7 +103,7 @@
     <pre id="logContent">載入中...</pre>
 
     <h2>模型辨識結果</h2>
-    <div id="status">尚未載入模型</div>
+    <div id="status">Edge Impulse 模型載入中...</div>
     <div>預測結果：<strong id="prediction">-</strong></div>
     <div>信心值：<strong id="confidence">-</strong></div>
     <div id="serverStatus">-</div>
@@ -113,74 +113,78 @@
   </footer>
 
 <script>
-const MODEL_URL = '/model/model.json';
-const IMAGE_WIDTH = 128;
-const IMAGE_HEIGHT = 128;
-const GESTURE_CLASSES = ['1', '2', '3', '4', '5'];
-let model;
+async function classifyImageWithEdgeImpulse(imgElement) {
+  if (typeof run_classifier === 'undefined') {
+    console.error('❌ run_classifier 尚未載入');
+    document.getElementById('status').innerText = '❌ 模型尚未載入';
+    return;
+  }
 
-async function loadModel() {
-  document.getElementById('status').innerText = '正在載入模型...';
-  model = await tf.loadGraphModel(MODEL_URL);
-  document.getElementById('status').innerText = '✅ 模型已載入';
-}
+  // 建立 canvas 並 resize 成模型訓練時的尺寸（例如 96x96）
+  const canvas = document.createElement('canvas');
+  const MODEL_INPUT_SIZE = 96; // 根據你在 Edge Impulse 設定的 image size 修改
+  canvas.width = MODEL_INPUT_SIZE;
+  canvas.height = MODEL_INPUT_SIZE;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(imgElement, 0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
+  const imageData = ctx.getImageData(0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
 
-function preprocessImage(imageElement) {
-  return tf.tidy(() => {
-    const tensor = tf.browser.fromPixels(imageElement);
-    const resized = tf.image.resizeBilinear(tensor, [IMAGE_HEIGHT, IMAGE_WIDTH]);
-    const normalized = resized.sub(127.5).div(127.5);
-    return normalized.expandDims(0);
-  });
-}
+  // 呼叫 Edge Impulse 的推論函式
+  const result = run_classifier(imageData);
+  console.log("🧠 Edge Impulse 推論結果：", result);
 
-async function predictImage(imgEl) {
-  console.log("🧠 開始預測...");
-  try {
-    const tensor = preprocessImage(imgEl);
-    const prediction = await model.predict(tensor);
-    const data = await prediction.data();
-    const index = tf.argMax(prediction, 1).dataSync()[0];
-    prediction.dispose();
+  if (result && result.result && result.result.classification?.length > 0) {
+    const top = result.result.classification[0];
+    document.getElementById('prediction').innerText = top.label;
+    document.getElementById('confidence').innerText = (top.value * 100).toFixed(2) + '%';
+    document.getElementById('status').innerText = '✅ 推論成功';
 
-    const predictedClass = GESTURE_CLASSES[index];
-    const confidence = data[index];
-
-    document.getElementById('prediction').innerText = predictedClass;
-    document.getElementById('confidence').innerText = (confidence * 100).toFixed(2) + '%';
-
-    console.log("✅ 預測完成：", predictedClass, confidence);
-    console.log("🔬 模型輸出所有分類機率：");
-    GESTURE_CLASSES.forEach((label, i) => {
-      console.log(`${label}: ${(data[i] * 100).toFixed(2)}%`);
-    });
-
-    if (confidence > 0.5) {
+    if (top.value > 0.5) {
       document.getElementById('serverStatus').innerText = '🔄 傳送中...';
       fetch('/predict-result', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          result: predictedClass,
-          confidence: (confidence * 100).toFixed(2) + '%'
+          result: top.label,
+          confidence: (top.value * 100).toFixed(2) + '%'
         })
       })
-        .then(res => res.text())
-        .then(txt => {
-          console.log("📩 伺服器回應：", txt);
-          document.getElementById('serverStatus').innerText = '✅ 已傳送結果至伺服器並嘗試寄信';
-        })
-        .catch(err => {
-          console.error("❌ 傳送錯誤：", err);
-          document.getElementById('serverStatus').innerText = '❌ 傳送失敗';
-        });
+      .then(res => res.text())
+      .then(txt => {
+        console.log("📩 伺服器回應：", txt);
+        document.getElementById('serverStatus').innerText = '✅ 已傳送結果至伺服器';
+      })
+      .catch(err => {
+        console.error("❌ 傳送錯誤：", err);
+        document.getElementById('serverStatus').innerText = '❌ 傳送失敗';
+      });
     } else {
       document.getElementById('serverStatus').innerText = '⚠️ 信心值不足，未傳送';
     }
-  } catch (e) {
-    console.error("❌ 預測錯誤：", e);
-    document.getElementById('serverStatus').innerText = '❌ 預測錯誤';
+
+  } else {
+    document.getElementById('prediction').innerText = '-';
+    document.getElementById('confidence').innerText = '0%';
+    document.getElementById('status').innerText = '⚠️ 無分類結果';
   }
+}
+
+function refreshImage() {
+  const cam = document.getElementById('camera');
+  const hidden = document.getElementById('esp32Image');
+  const timestamp = new Date().getTime();
+  const url = '/latest.jpg?t=' + timestamp;
+  cam.src = url;
+  hidden.src = url;
+
+  hidden.onload = () => {
+    console.log("✅ 圖片 onload，準備分類");
+    classifyImageWithEdgeImpulse(hidden);
+  };
+
+  hidden.onerror = () => {
+    console.warn("🚫 圖片載入錯誤");
+  };
 }
 
 async function loadLogs() {
@@ -195,23 +199,6 @@ async function loadLogs() {
   });
 }
 
-function refreshImage() {
-  const cam = document.getElementById('camera');
-  const hidden = document.getElementById('esp32Image');
-  const timestamp = new Date().getTime();
-  const url = '/latest.jpg?t=' + timestamp;
-  cam.src = url;
-  hidden.src = url;
-  
-  hidden.onload = () => {
-    console.log("✅ 圖片 onload 觸發，開始預測");
-    predictImage(hidden);
-  };
-  hidden.onerror = () => {
-    console.warn("🚫 圖片載入錯誤（可能尚未上傳或 404）");
-  };
-}
-
 async function loadLogTimestamp() {
   try {
     const res = await fetch('/latest-image-info');
@@ -219,7 +206,6 @@ async function loadLogTimestamp() {
 
     const data = await res.json();
     const latest = data.timestamp;
-
     document.getElementById('logContent').textContent = latest;
     document.getElementById('imageTime').innerText =
       '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
@@ -229,11 +215,8 @@ async function loadLogTimestamp() {
   }
 }
 
-
-
-
-async function main() {
-  await loadModel();
+function main() {
+  document.getElementById('status').innerText = '✅ 模型初始化完成';
   loadLogs();
   refreshImage();
   loadLogTimestamp();
@@ -244,7 +227,7 @@ async function main() {
   }, 5000);
 }
 
-main();
+window.onload = main;
 </script>
 </body>
 </html>
