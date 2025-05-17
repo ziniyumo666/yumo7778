@@ -147,9 +147,11 @@ async function loadInferenceResult() {
   const statusEl = document.getElementById('status');
   const predictionEl = document.getElementById('prediction');
   const confidenceEl = document.getElementById('confidence');
+  const timestamp = new Date().getTime(); // 新增時間戳
+  const url = '/inference-log.json?t=' + timestamp; // 在 URL 中加入時間戳
 
   try {
-    const res = await fetch('/inference-log.json');
+    const res = await fetch(url); // 使用帶有時間戳的 URL
     if (!res.ok) {
       throw new Error('無法獲取推論結果');
     }
@@ -177,7 +179,7 @@ async function loadInferenceResult() {
     confidenceEl.innerText = '無';
   }
 }
-
+  
 function startAll() {
   loadLogs();
   refreshImage();
