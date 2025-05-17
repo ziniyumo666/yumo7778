@@ -4,8 +4,8 @@ const bodyParser = require('body-parser');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const jpeg = require('jpeg-js');
 const nodemailer = require('nodemailer');
+const { createCanvas, loadImage } = require('canvas');
 const runImpulse = require('./ei_model/run-impulse');
 
 const app = express();
@@ -48,10 +48,18 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
       throw new Error('模型尚未初始化或不支援影像推論');
     }
 
-    const decoded = jpeg.decode(req.body, true);
-    const input = Array.from(decoded.data)
-      .filter((_, i) => i % 4 !== 3) // 移除 alpha
-      .map(v => v / 255); // normalize
+    const image = await loadImage(imagePath);
+    const canvas = createCanvas(96, 96);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0, 96, 96);
+    const imageData = ctx.getImageData(0, 0, 96, 96).data;
+
+    const input = [];
+    for (let i = 0; i < imageData.length; i += 4) {
+      input.push(imageData[i] / 255);     // R
+      input.push(imageData[i + 1] / 255); // G
+      input.push(imageData[i + 2] / 255); // B
+    }
 
     const result = classifier.classify(input);
     console.log('📊 推論結果：', result);
@@ -128,5 +136,4 @@ app.get('/logs', (req, res) => {
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
   console.log('🚀 Server is running...');
 });
-
 
