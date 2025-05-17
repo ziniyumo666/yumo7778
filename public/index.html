@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <title>輪椅傾倒辨識與影像系統</title>
   <link rel="icon" href="/io.png" type="image/png" />
-  <script src="/ei_model/edge-impulse-browser.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -95,84 +94,26 @@
 
     <h2>即時影像</h2>
     <img id="camera" src="/latest.jpg" alt="Loading image...">
-    <img id="esp32Image" src="/latest.jpg" style="display:none;" crossorigin="anonymous" />
     <div id="imageTime">圖片更新時間：-</div>
 
     <h2>最後上傳時間</h2>
     <pre id="logContent">載入中...</pre>
 
-    <h2>模型辨識結果</h2>
-    <div id="status">Edge Impulse 模型載入中...</div>
+    <h2>模型辨識結果（由伺服器推論）</h2>
+    <div id="status">等待結果中...</div>
     <div>預測結果：<strong id="prediction">-</strong></div>
     <div>信心值：<strong id="confidence">-</strong></div>
-    <div id="serverStatus">-</div>
   </main>
   <footer>
     Powered by ESP32-CAM ｜ Sausagee Party Server
   </footer>
 
 <script>
-async function classifyImageWithEdgeImpulse(imgElement) {
-  if (typeof run !== 'function') {
-    console.error('❌ 模型尚未準備好');
-    document.getElementById('status').innerText = '❌ 模型尚未準備好';
-    return;
-  }
-
-  const MODEL_INPUT_SIZE = 96;
-  const canvas = document.createElement('canvas');
-  canvas.width = MODEL_INPUT_SIZE;
-  canvas.height = MODEL_INPUT_SIZE;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(imgElement, 0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
-  const imageData = ctx.getImageData(0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
-
-  const result = await run(imageData);
-  console.log("🧠 Edge Impulse 推論結果：", result);
-
-  if (result && result.classification?.length > 0) {
-    const top = result.classification.sort((a, b) => b.value - a.value)[0];
-    document.getElementById('prediction').innerText = top.label;
-    document.getElementById('confidence').innerText = (top.value * 100).toFixed(2) + '%';
-    document.getElementById('status').innerText = '✅ 推論成功';
-
-    if (top.value > 0.5) {
-      document.getElementById('serverStatus').innerText = '🔄 傳送中...';
-      fetch('/predict-result', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          result: top.label,
-          confidence: (top.value * 100).toFixed(2) + '%'
-        })
-      })
-      .then(res => res.text())
-      .then(txt => {
-        document.getElementById('serverStatus').innerText = '✅ 已傳送結果至伺服器';
-      })
-      .catch(err => {
-        document.getElementById('serverStatus').innerText = '❌ 傳送失敗';
-      });
-    } else {
-      document.getElementById('serverStatus').innerText = '⚠️ 信心值不足，未傳送';
-    }
-  } else {
-    document.getElementById('prediction').innerText = '-';
-    document.getElementById('confidence').innerText = '0%';
-    document.getElementById('status').innerText = '⚠️ 無分類結果';
-  }
-}
-
 function refreshImage() {
   const cam = document.getElementById('camera');
-  const hidden = document.getElementById('esp32Image');
   const timestamp = new Date().getTime();
   const url = '/latest.jpg?t=' + timestamp;
   cam.src = url;
-  hidden.src = url;
-  hidden.onload = () => {
-    classifyImageWithEdgeImpulse(hidden);
-  };
 }
 
 async function loadLogs() {
@@ -201,28 +142,35 @@ async function loadLogTimestamp() {
   }
 }
 
+async function loadInferenceResult() {
+  try {
+    const res = await fetch('/inference-log.json');
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    document.getElementById('status').innerText = '✅ 推論成功';
+    document.getElementById('prediction').innerText = data.label || '-';
+    document.getElementById('confidence').innerText = data.value ? (data.value * 100).toFixed(2) + '%' : '-';
+  } catch (e) {
+    document.getElementById('status').innerText = '⚠️ 尚無結果';
+    document.getElementById('prediction').innerText = '-';
+    document.getElementById('confidence').innerText = '-';
+  }
+}
+
 function startAll() {
   loadLogs();
   refreshImage();
   loadLogTimestamp();
+  loadInferenceResult();
   setInterval(() => {
     loadLogs();
     refreshImage();
     loadLogTimestamp();
-  }, 2000);
+    loadInferenceResult();
+  }, 5000);
 }
 
-window.onload = async () => {
-  document.getElementById('status').innerText = '⏳ 載入 Edge Impulse 模型中...';
-  try {
-    await loadWasmModel('/ei_model/edge-impulse-standalone.wasm');
-    document.getElementById('status').innerText = '✅ 模型載入完成';
-    startAll();
-  } catch (err) {
-    console.error("❌ 模型載入失敗：", err);
-    document.getElementById('status').innerText = '❌ 模型載入失敗';
-  }
-};
+window.onload = startAll;
 </script>
 </body>
 </html>
