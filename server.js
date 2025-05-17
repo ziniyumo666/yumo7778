@@ -66,7 +66,7 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
       input.push(data[i + 1] / 255);
       input.push(data[i + 2] / 255);
     }
-
+    console.log("📏 預處理後的 input 陣列長度：", input.length);
     console.log('🔎 預處理前幾個 input：', input.slice(0, 10));
 
     const result = await classifier.classify(input);
