@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const multer = require('multer');
@@ -50,9 +49,19 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
     }
 
     const decoded = jpeg.decode(req.body, true);
-    const input = Array.from(decoded.data)
-      .filter((_, i) => i % 4 !== 3)
-      .map(v => v / 255);
+    const { width, height, data } = decoded;
+    if (width !== 96 || height !== 96) {
+      throw new Error(`圖片尺寸應為 96x96，但實際為 ${width}x${height}`);
+    }
+
+    // 轉換為 planar RGB (R...G...B...)
+    const r = [], g = [], b = [];
+    for (let i = 0; i < data.length; i += 4) {
+      r.push(data[i] / 255);
+      g.push(data[i + 1] / 255);
+      b.push(data[i + 2] / 255);
+    }
+    const input = r.concat(g, b);
 
     const result = classifier.classify(input);
     console.log('📊 推論結果：', result);
@@ -138,6 +147,10 @@ app.get('/inference-log.json', (req, res) => {
   const data = fs.readFileSync(inferenceLogPath, 'utf8');
   res.setHeader('Content-Type', 'application/json');
   res.send(data);
+});
+
+app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
+  console.log('🚀 Server is running...');
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
