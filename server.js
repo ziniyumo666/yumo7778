@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const jpeg = require('jpeg-js');
 const nodemailer = require('nodemailer');
-const EdgeImpulseClassifier = require('./ei_model/run-impulse');
+const ei = require('./ei_model/run-impulse');
 
 const app = express();
 const logs = [];
@@ -13,9 +13,9 @@ const imagePath = path.join(__dirname, 'public', 'latest.jpg');
 const logPath = path.join(__dirname, 'public', 'log.txt');
 const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
 
-// 初始化 Edge Impulse 模型
-const classifier = new EdgeImpulseClassifier();
-classifier.init().then(() => {
+let classifier;
+ei.init().then(() => {
+  classifier = ei;
   console.log('✅ Edge Impulse 模型已初始化');
 });
 
@@ -38,6 +38,8 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
     fs.appendFileSync(logPath, logLine);
     console.log(logLine.trim());
 
+    if (!classifier) throw new Error('模型尚未初始化');
+
     // 解析圖片為 RGB float32
     const decoded = jpeg.decode(req.body, true);
     const { width, height, data } = decoded;
@@ -49,7 +51,6 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
       input.push(data[i + 2] / 255); // B
     }
 
-    // 推論
     const result = classifier.classify(input);
     const top = result.results?.sort((a, b) => b.value - a.value)[0] || { label: '-', value: 0 };
 
