@@ -113,23 +113,32 @@
   </footer>
 
 <script>
-async function classifyImageWithEdgeImpulse(imgElement) {
-  if (typeof run_classifier === 'undefined') {
-    console.error('❌ run_classifier 尚未載入');
-    document.getElementById('status').innerText = '❌ 模型尚未載入';
-    return;
-  }
+function waitForClassifierReady(callback, maxWait = 5000) {
+  const start = Date.now();
+  const checkReady = () => {
+    if (typeof run_classifier !== 'undefined') {
+      console.log("✅ run_classifier 已載入");
+      document.getElementById('status').innerText = '✅ 模型初始化完成';
+      callback();
+    } else if (Date.now() - start > maxWait) {
+      console.error("❌ 模型載入逾時（未定義 run_classifier）");
+      document.getElementById('status').innerText = '❌ 模型載入失敗';
+    } else {
+      setTimeout(checkReady, 200);
+    }
+  };
+  checkReady();
+}
 
-  // 建立 canvas 並 resize 成模型訓練時的尺寸（例如 96x96）
+function classifyImageWithEdgeImpulse(imgElement) {
+  const MODEL_INPUT_SIZE = 96;
   const canvas = document.createElement('canvas');
-  const MODEL_INPUT_SIZE = 96; // 根據你在 Edge Impulse 設定的 image size 修改
   canvas.width = MODEL_INPUT_SIZE;
   canvas.height = MODEL_INPUT_SIZE;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(imgElement, 0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
   const imageData = ctx.getImageData(0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
 
-  // 呼叫 Edge Impulse 的推論函式
   const result = run_classifier(imageData);
   console.log("🧠 Edge Impulse 推論結果：", result);
 
@@ -161,7 +170,6 @@ async function classifyImageWithEdgeImpulse(imgElement) {
     } else {
       document.getElementById('serverStatus').innerText = '⚠️ 信心值不足，未傳送';
     }
-
   } else {
     document.getElementById('prediction').innerText = '-';
     document.getElementById('confidence').innerText = '0%';
@@ -176,14 +184,8 @@ function refreshImage() {
   const url = '/latest.jpg?t=' + timestamp;
   cam.src = url;
   hidden.src = url;
-
   hidden.onload = () => {
-    console.log("✅ 圖片 onload，準備分類");
-    classifyImageWithEdgeImpulse(hidden);
-  };
-
-  hidden.onerror = () => {
-    console.warn("🚫 圖片載入錯誤");
+    if (typeof run_classifier !== 'undefined') classifyImageWithEdgeImpulse(hidden);
   };
 }
 
@@ -202,21 +204,18 @@ async function loadLogs() {
 async function loadLogTimestamp() {
   try {
     const res = await fetch('/latest-image-info');
-    if (!res.ok) throw new Error('尚未上傳圖片');
-
+    if (!res.ok) throw new Error();
     const data = await res.json();
     const latest = data.timestamp;
     document.getElementById('logContent').textContent = latest;
-    document.getElementById('imageTime').innerText =
-      '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
-  } catch (e) {
+    document.getElementById('imageTime').innerText = '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
+  } catch {
     document.getElementById('logContent').textContent = '⚠️ 尚未上傳圖片';
     document.getElementById('imageTime').innerText = '⚠️ 尚未上傳圖片';
   }
 }
 
-function main() {
-  document.getElementById('status').innerText = '✅ 模型初始化完成';
+function startPeriodicTasks() {
   loadLogs();
   refreshImage();
   loadLogTimestamp();
@@ -227,7 +226,11 @@ function main() {
   }, 2000);
 }
 
-window.onload = main;
+window.onload = () => {
+  document.getElementById('status').innerText = '⏳ 模型載入中...';
+  waitForClassifierReady(startPeriodicTasks);
+};
 </script>
 </body>
 </html>
+
