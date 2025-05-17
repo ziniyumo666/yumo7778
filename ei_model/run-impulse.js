@@ -1,6 +1,6 @@
 // Load the inferencing WebAssembly module
 const Module = require('./edge-impulse-standalone');
-const fs = require('fs');
+const fs = require('fs'); // 確保 fs 被引入
 
 // Classifier module
 let classifierInitialized = false;
@@ -12,24 +12,38 @@ class EdgeImpulseClassifier {
     _initialized = false;
 
     init() {
-        if (classifierInitialized === true) return Promise.resolve();
+        if (classifierInitialized === true && Module.isInitialized) { // 加上 Module.isInitialized 檢查
+             // 如果 Module 已經通過 onRuntimeInitialized 回調並且內部也初始化了
+            if (!this._initialized && typeof Module.init === 'function') {
+                Module.init(); // 確保如果 Module 有自己的 init 也被調用
+                this._initialized = true;
+            }
+            return Promise.resolve();
+        }
 
         return new Promise((resolve) => {
             Module.onRuntimeInitialized = () => {
-                classifierInitialized = true;
-                Module.init();
+                classifierInitialized = true; // 全局標記
+                if (typeof Module.init === 'function') {
+                    Module.init(); // Edge Impulse WASM 模塊的初始化函數
+                }
+                this._initialized = true; // 實例標記
                 resolve();
             };
+            // 如果 Module 已經提前初始化了但我們的回調錯過了 (不太可能，但作為防禦)
+            if (Module.isInitialized && !classifierInitialized) {
+                 Module.onRuntimeInitialized();
+            }
         });
     }
 
     getProjectInfo() {
-        if (!classifierInitialized) throw new Error('Module is not initialized');
+        if (!this._initialized || !classifierInitialized) throw new Error('Module is not initialized'); // 檢查實例和全局初始化
         return this._convertToOrdinaryJsObject(Module.get_project(), Module.emcc_classification_project_t.prototype);
     }
 
     classify(rawData, debug = false) {
-        if (!classifierInitialized) throw new Error('Module is not initialized');
+        if (!this._initialized || !classifierInitialized) throw new Error('Module is not initialized');
 
         const obj = this._arrayToHeap(rawData);
         let ret = Module.run_classifier(obj.buffer.byteOffset, rawData.length, debug);
@@ -43,7 +57,7 @@ class EdgeImpulseClassifier {
     }
 
     classifyContinuous(rawData, enablePerfCal = true) {
-        if (!classifierInitialized) throw new Error('Module is not initialized');
+        if (!this._initialized || !classifierInitialized) throw new Error('Module is not initialized');
 
         const obj = this._arrayToHeap(rawData);
         let ret = Module.run_classifier_continuous(obj.buffer.byteOffset, rawData.length, false, enablePerfCal);
@@ -57,15 +71,12 @@ class EdgeImpulseClassifier {
     }
 
     getProperties() {
-        if (!classifierInitialized) throw new Error('Module is not initialized');
+        if (!this._initialized || !classifierInitialized) throw new Error('Module is not initialized');
         return this._convertToOrdinaryJsObject(Module.get_properties(), Module.emcc_classification_properties_t.prototype);
     }
 
-    /**
-     * Override the threshold on a learn block (you can find thresholds via getProperties().thresholds)
-     * @param {*} obj, e.g. { id: 16, min_score: 0.2 } to set min. object detection threshold to 0.2 for block ID 16
-     */
     setThreshold(obj) {
+        if (!this._initialized || !classifierInitialized) throw new Error('Module is not initialized'); // 添加初始化檢查
         const ret = Module.set_threshold(obj);
         if (!ret.success) {
             throw new Error(ret.error);
@@ -87,13 +98,14 @@ class EdgeImpulseClassifier {
             const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
 
             if (descriptor && typeof descriptor.get === 'function') {
-                newObj[key] = emboundObj[key]; // Evaluates the getter and assigns as an own property.
+                newObj[key] = emboundObj[key];
             }
         }
         return newObj;
     }
 
     _fillResultStruct(ret) {
+        if (!this._initialized || !classifierInitialized) throw new Error('Module is not initialized'); // 添加初始化檢查
         let props = Module.get_properties();
 
         let jsResult = {
@@ -138,26 +150,32 @@ class EdgeImpulseClassifier {
     }
 }
 
-if (!process.argv[2]) {
-    return console.error('Requires one parameter (a comma-separated list of raw features, or a file pointing at raw features)');
+// 僅當此文件作為主腳本直接執行時，才運行以下命令列邏輯
+if (require.main === module) {
+    if (!process.argv[2]) {
+        console.error('Requires one parameter (a comma-separated list of raw features, or a file pointing at raw features)');
+        process.exit(1); // 在命令列模式下，如果參數不足則退出
+    }
+
+    let features = process.argv[2];
+    if (fs.existsSync(features)) {
+        features = fs.readFileSync(features, 'utf-8');
+    }
+
+    // Initialize the classifier, and invoke with the argument passed in
+    let cliClassifier = new EdgeImpulseClassifier(); // 改個名字以避免與類名混淆
+    cliClassifier.init().then(async () => {
+        let project = cliClassifier.getProjectInfo();
+        console.log('Running inference for', project.owner + ' / ' + project.name + ' (version ' + project.deploy_version + ')');
+
+        let result = cliClassifier.classify(features.trim().split(',').map(n => Number(n)));
+
+        console.log(result);
+    }).catch(err => {
+        console.error('Failed to initialize classifier for CLI:', err); // 添加更明確的錯誤訊息
+        process.exit(1); // 在命令列模式下，初始化失敗則退出
+    });
 }
 
-let features = process.argv[2];
-if (fs.existsSync(features)) {
-    features = fs.readFileSync(features, 'utf-8');
-}
-
-// Initialize the classifier, and invoke with the argument passed in
-let classifier = new EdgeImpulseClassifier();
-classifier.init().then(async () => {
-    let project = classifier.getProjectInfo();
-    console.log('Running inference for', project.owner + ' / ' + project.name + ' (version ' + project.deploy_version + ')');
-
-    let result = classifier.classify(features.trim().split(',').map(n => Number(n)));
-
-    console.log(result);
-}).catch(err => {
-    console.error('Failed to initialize classifier', err);
-});
-
+// 無論如何，都導出 EdgeImpulseClassifier 類，供其他模組 require 使用
 module.exports = EdgeImpulseClassifier;
