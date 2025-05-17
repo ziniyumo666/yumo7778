@@ -5,7 +5,7 @@
   <title>輪椅傾倒辨識與影像系統</title>
   <link rel="icon" href="/io.png" type="image/png" />
   <script src="/ei_model/edge-impulse-standalone.js"></script>
-  <script src="/ei_model/run-impulse.js"></script>
+  <script src="/ei_model/run_impulse.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -113,15 +113,16 @@
   </footer>
 
 <script>
+let classifierReady = false;
+
 function waitForClassifierReady(callback, maxWait = 5000) {
   const start = Date.now();
   const checkReady = () => {
-    if (typeof run_classifier !== 'undefined') {
-      console.log("✅ run_classifier 已載入");
+    if (typeof run === 'function') {
+      classifierReady = true;
       document.getElementById('status').innerText = '✅ 模型初始化完成';
       callback();
     } else if (Date.now() - start > maxWait) {
-      console.error("❌ 模型載入逾時（未定義 run_classifier）");
       document.getElementById('status').innerText = '❌ 模型載入失敗';
     } else {
       setTimeout(checkReady, 200);
@@ -130,7 +131,8 @@ function waitForClassifierReady(callback, maxWait = 5000) {
   checkReady();
 }
 
-function classifyImageWithEdgeImpulse(imgElement) {
+async function classifyImageWithEdgeImpulse(imgElement) {
+  if (!classifierReady) return;
   const MODEL_INPUT_SIZE = 96;
   const canvas = document.createElement('canvas');
   canvas.width = MODEL_INPUT_SIZE;
@@ -139,11 +141,11 @@ function classifyImageWithEdgeImpulse(imgElement) {
   ctx.drawImage(imgElement, 0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
   const imageData = ctx.getImageData(0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
 
-  const result = run_classifier(imageData);
+  const result = await run(imageData);
   console.log("🧠 Edge Impulse 推論結果：", result);
 
-  if (result && result.result && result.result.classification?.length > 0) {
-    const top = result.result.classification[0];
+  if (result && result.classification?.length > 0) {
+    const top = result.classification.sort((a, b) => b.value - a.value)[0];
     document.getElementById('prediction').innerText = top.label;
     document.getElementById('confidence').innerText = (top.value * 100).toFixed(2) + '%';
     document.getElementById('status').innerText = '✅ 推論成功';
@@ -160,11 +162,9 @@ function classifyImageWithEdgeImpulse(imgElement) {
       })
       .then(res => res.text())
       .then(txt => {
-        console.log("📩 伺服器回應：", txt);
         document.getElementById('serverStatus').innerText = '✅ 已傳送結果至伺服器';
       })
       .catch(err => {
-        console.error("❌ 傳送錯誤：", err);
         document.getElementById('serverStatus').innerText = '❌ 傳送失敗';
       });
     } else {
@@ -185,7 +185,7 @@ function refreshImage() {
   cam.src = url;
   hidden.src = url;
   hidden.onload = () => {
-    if (typeof run_classifier !== 'undefined') classifyImageWithEdgeImpulse(hidden);
+    if (classifierReady) classifyImageWithEdgeImpulse(hidden);
   };
 }
 
@@ -233,4 +233,3 @@ window.onload = () => {
 </script>
 </body>
 </html>
-
