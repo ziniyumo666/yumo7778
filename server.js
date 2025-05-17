@@ -1,18 +1,16 @@
 // server.js
 const express = require('express');
 const bodyParser = require('body-parser');
-const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const jpeg = require('jpeg-js');
 const nodemailer = require('nodemailer');
 const runImpulse = require('./ei_model/run-impulse');
 const { createCanvas, loadImage } = require('canvas');
 
 const app = express();
 const logs = [];
-
 let classifier = null;
+
 (async () => {
   try {
     classifier = await runImpulse();
@@ -56,16 +54,27 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
 
     const canvas = createCanvas(MODEL_WIDTH, MODEL_HEIGHT);
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, MODEL_WIDTH, MODEL_HEIGHT);
-    const imageData = ctx.getImageData(0, 0, MODEL_WIDTH, MODEL_HEIGHT);
 
+    // ✅ 等比例縮放並置中裁切
+    const ratio = Math.max(MODEL_WIDTH / img.width, MODEL_HEIGHT / img.height);
+    const x = (MODEL_WIDTH - img.width * ratio) / 2;
+    const y = (MODEL_HEIGHT - img.height * ratio) / 2;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, MODEL_WIDTH, MODEL_HEIGHT);
+    ctx.drawImage(img, x, y, img.width * ratio, img.height * ratio);
+
+    const imageData = ctx.getImageData(0, 0, MODEL_WIDTH, MODEL_HEIGHT);
     const input = [];
     const data = imageData.data;
+
     for (let i = 0; i < data.length; i += 4) {
+      // 使用 RGB 模型
       input.push(data[i] / 255);
       input.push(data[i + 1] / 255);
       input.push(data[i + 2] / 255);
     }
+
+    console.log('🔎 預處理前幾個 input：', input.slice(0, 10));
 
     const result = classifier.classify(input);
     console.log('📊 推論結果：', result);
@@ -96,44 +105,16 @@ app.post('/upload', (req, res) => {
   };
 
   transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      console.error("❌ 發信失敗：", error);
-    } else {
-      console.log("✅ 發信成功：" + info.response);
-    }
+    if (error) console.error("❌ 發信失敗：", error);
+    else console.log("✅ 發信成功：" + info.response);
   });
 
   res.send('OK');
 });
 
-app.post('/predict-result', (req, res) => {
-  const { result, confidence } = req.body;
-  const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-  console.log(`🤖 收到模型預測：${result}, 信心值：${confidence}`);
-
-  const mailOptions = {
-    from: 'ray2017good@gmail.com',
-    to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'],
-    subject: `🤖 模型辨識結果通知`,
-    text: `辨識到手勢：「${result}」\n信心值：${confidence}\n時間：${time}`
-  };
-
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      console.error("❌ 發信失敗（模型辨識）：", error);
-    } else {
-      console.log("✅ 模型辨識發信成功：" + info.response);
-    }
-  });
-
-  res.send('Result received and email sent.');
-});
-
 app.get('/latest-image-info', (req, res) => {
   const logPath = path.join(__dirname, 'public', 'log.txt');
-  if (!fs.existsSync(logPath)) {
-    return res.status(404).json({ error: '尚未上傳圖片' });
-  }
+  if (!fs.existsSync(logPath)) return res.status(404).json({ error: '尚未上傳圖片' });
   const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n');
   const latest = lines[lines.length - 1];
   res.json({ timestamp: latest });
@@ -145,9 +126,7 @@ app.get('/logs', (req, res) => {
 
 app.get('/inference-log.json', (req, res) => {
   const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
-  if (!fs.existsSync(inferenceLogPath)) {
-    return res.status(404).json({ label: '-', value: 0 });
-  }
+  if (!fs.existsSync(inferenceLogPath)) return res.status(404).json({ label: '-', value: 0 });
   const data = fs.readFileSync(inferenceLogPath, 'utf8');
   res.setHeader('Content-Type', 'application/json');
   res.send(data);
