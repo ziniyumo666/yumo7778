@@ -107,6 +107,9 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
 
     const result = await classifier.classify(input); // 傳遞原始像素數據陣列
     console.log('📊 推論結果：', result);
+    if (result && result.results && result.results.length > 0) {
+      result.results.sort((a, b) => b.value - a.value); // 降序排序
+    }
 
     const top = result.results?.[0] || { label: '-', value: 0 };
     fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: top.label, value: top.value }));
