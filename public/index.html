@@ -65,11 +65,11 @@
       margin-left: auto;
       margin-right: auto;
     }
-    #prediction, #confidence {
+    #prediction, #confidence, #inferenceDataTime { /* 將 #inferenceDataTime 加入 */
       font-size: 18px;
       margin-top: 10px;
     }
-    #serverStatus {
+    #serverStatus { /* 雖然原程式碼中沒有這個ID，但保留以防未來使用 */
       margin-top: 10px;
       font-size: 16px;
       color: #555;
@@ -103,7 +103,7 @@
     <div id="status">等待結果中...</div>
     <div>預測結果：<strong id="prediction">-</strong></div>
     <div>信心值：<strong id="confidence">-</strong></div>
-  </main>
+    <div>推論資料時間：<strong id="inferenceDataTime">-</strong></div> </main>
   <footer>
     Powered by ESP32-CAM ｜ Sausagee Party Server
   </footer>
@@ -120,8 +120,8 @@ async function loadLogs() {
   const res = await fetch('/logs');
   const logs = await res.json();
   const table = document.getElementById('logTable');
-  table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>';
-  logs.reverse().forEach(log => {
+  table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>'; // 清空並重新填寫表頭
+  logs.reverse().forEach(log => { // 將最新的紀錄顯示在最上方
     const row = document.createElement('tr');
     row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
     table.appendChild(row);
@@ -131,55 +131,84 @@ async function loadLogs() {
 async function loadLogTimestamp() {
   try {
     const res = await fetch('/latest-image-info');
-    if (!res.ok) throw new Error();
+    if (!res.ok) {
+        // 如果伺服器回應不成功 (例如 404)，則拋出錯誤以便 catch 區塊處理
+        throw new Error('Failed to fetch latest image info, status: ' + res.status);
+    }
     const data = await res.json();
-    const latest = data.timestamp;
-    document.getElementById('logContent').textContent = latest;
-    document.getElementById('imageTime').innerText = '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
-  } catch {
-    document.getElementById('logContent').textContent = '⚠️ 尚未上傳圖片';
-    document.getElementById('imageTime').innerText = '⚠️ 尚未上傳圖片';
+    if (data && data.timestamp) { // 確保 data 和 data.timestamp 存在
+        const latest = data.timestamp;
+        document.getElementById('logContent').textContent = latest;
+        document.getElementById('imageTime').innerText = '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
+    } else {
+        // 如果回應的 JSON 格式不符預期
+        document.getElementById('logContent').textContent = '⚠️ 時間戳格式錯誤';
+        document.getElementById('imageTime').innerText = '⚠️ 時間戳格式錯誤';
+    }
+  } catch(error) { // 捕獲 fetch 失敗或上面拋出的錯誤
+    console.error("載入最後上傳時間時發生錯誤:", error);
+    document.getElementById('logContent').textContent = '⚠️ 尚未上傳圖片或載入失敗';
+    document.getElementById('imageTime').innerText = '⚠️ 尚未上傳圖片或載入失敗';
   }
 }
 
 async function loadInferenceResult() {
-  const confidenceThreshold = 0.7; // 設定信心域值，例如 0.7 (70%)
+  const confidenceThreshold = 0.7;
   const statusEl = document.getElementById('status');
   const predictionEl = document.getElementById('prediction');
   const confidenceEl = document.getElementById('confidence');
-  const timestamp = new Date().getTime(); // 新增時間戳
-  const url = '/inference-log.json?t=' + timestamp; // 在 URL 中加入時間戳
+  const inferenceDataTimeEl = document.getElementById('inferenceDataTime'); // 獲取新元素
+  const timestamp = new Date().getTime();
+  const url = '/inference-log.json?t=' + timestamp;
 
   try {
-    const res = await fetch(url); // 使用帶有時間戳的 URL
+    const res = await fetch(url);
     if (!res.ok) {
-      throw new Error('無法獲取推論結果');
+      throw new Error('無法獲取推論結果 (HTTP status ' + res.status + ')');
     }
     const data = await res.json();
 
-    if (data && typeof data.value === 'number' && typeof data.label === 'string') {
+    // 先處理 data.error 的情況
+    if (data && data.error) {
+      statusEl.innerText = `⚠️ 推論錯誤: ${data.error}`;
+      predictionEl.innerText = '無';
+      confidenceEl.innerText = '無';
+      if (data.errorTime) {
+        inferenceDataTimeEl.innerText = new Date(data.errorTime).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+      } else {
+        inferenceDataTimeEl.innerText = '-';
+      }
+    } else if (data && typeof data.value === 'number' && typeof data.label === 'string') {
       statusEl.innerText = '✅ 推論成功';
       if (data.value >= confidenceThreshold) {
         predictionEl.innerText = data.label;
         confidenceEl.innerText = (data.value * 100).toFixed(2) + '%';
       } else {
-        predictionEl.innerText = '無';
-        confidenceEl.innerText = '無 (' + (data.value * 100).toFixed(2) + '%)'; // 顯示 "無" 並附帶實際低信心值
+        predictionEl.innerText = '無 (低信心)';
+        confidenceEl.innerText = (data.value * 100).toFixed(2) + '%';
+      }
+      // 顯示成功的推論時間
+      if (data.inferenceTime) {
+        inferenceDataTimeEl.innerText = new Date(data.inferenceTime).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+      } else {
+        inferenceDataTimeEl.innerText = '-';
       }
     } else {
-      // 若資料格式不符或缺失 label/value
+      // 若資料格式不符或缺失 label/value，且不是明確的錯誤回報
       statusEl.innerText = '⚠️ 推論結果格式錯誤或資料不完整';
       predictionEl.innerText = '無';
       confidenceEl.innerText = '無';
+      inferenceDataTimeEl.innerText = '-';
     }
   } catch (e) {
     console.error("載入推論結果時發生錯誤:", e);
-    statusEl.innerText = '⚠️ 尚無結果或載入失敗';
+    statusEl.innerText = '⚠️ 尚無結果或載入失敗 (' + e.message + ')';
     predictionEl.innerText = '無';
     confidenceEl.innerText = '無';
+    inferenceDataTimeEl.innerText = '-';
   }
 }
-  
+
 function startAll() {
   loadLogs();
   refreshImage();
@@ -190,7 +219,7 @@ function startAll() {
     refreshImage();
     loadLogTimestamp();
     loadInferenceResult();
-  }, 5000);
+  }, 5000); // 每 5 秒更新一次
 }
 
 window.onload = startAll;
