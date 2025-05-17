@@ -4,8 +4,8 @@ const bodyParser = require('body-parser');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const jpeg = require('jpeg-js');
 const nodemailer = require('nodemailer');
-const { createCanvas, loadImage } = require('canvas');
 const runImpulse = require('./ei_model/run-impulse');
 
 const app = express();
@@ -35,6 +35,7 @@ app.use(express.static('public'));
 app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), async (req, res) => {
   const imagePath = path.join(__dirname, 'public', 'latest.jpg');
   const logPath = path.join(__dirname, 'public', 'log.txt');
+  const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
 
   fs.writeFileSync(imagePath, req.body);
 
@@ -48,23 +49,19 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
       throw new Error('模型尚未初始化或不支援影像推論');
     }
 
-    const image = await loadImage(imagePath);
-    const canvas = createCanvas(96, 96);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(image, 0, 0, 96, 96);
-    const imageData = ctx.getImageData(0, 0, 96, 96).data;
-
-    const input = [];
-    for (let i = 0; i < imageData.length; i += 4) {
-      input.push(imageData[i] / 255);     // R
-      input.push(imageData[i + 1] / 255); // G
-      input.push(imageData[i + 2] / 255); // B
-    }
+    const decoded = jpeg.decode(req.body, true);
+    const input = Array.from(decoded.data)
+      .filter((_, i) => i % 4 !== 3)
+      .map(v => v / 255);
 
     const result = classifier.classify(input);
     console.log('📊 推論結果：', result);
+
+    const top = result.results?.[0] || { label: '-', value: 0 };
+    fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: top.label, value: top.value }));
   } catch (err) {
     console.error('❌ 圖片處理錯誤：', err);
+    fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: '-', value: 0 }));
   }
 
   res.send('Image uploaded and processed.');
@@ -131,6 +128,16 @@ app.get('/latest-image-info', (req, res) => {
 
 app.get('/logs', (req, res) => {
   res.json(logs);
+});
+
+app.get('/inference-log.json', (req, res) => {
+  const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
+  if (!fs.existsSync(inferenceLogPath)) {
+    return res.status(404).json({ label: '-', value: 0 });
+  }
+  const data = fs.readFileSync(inferenceLogPath, 'utf8');
+  res.setHeader('Content-Type', 'application/json');
+  res.send(data);
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
