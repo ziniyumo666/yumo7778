@@ -4,8 +4,7 @@
   <meta charset="UTF-8">
   <title>輪椅傾倒辨識與影像系統</title>
   <link rel="icon" href="/io.png" type="image/png" />
-  <script src="/ei_model/edge-impulse-standalone.js"></script>
-  <script src="/ei_model/run_impulse.js"></script>
+  <script src="/ei_model/edge-impulse-browser.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -113,26 +112,13 @@
   </footer>
 
 <script>
-let classifierReady = false;
-
-function waitForClassifierReady(callback, maxWait = 5000) {
-  const start = Date.now();
-  const checkReady = () => {
-    if (typeof run === 'function') {
-      classifierReady = true;
-      document.getElementById('status').innerText = '✅ 模型初始化完成';
-      callback();
-    } else if (Date.now() - start > maxWait) {
-      document.getElementById('status').innerText = '❌ 模型載入失敗';
-    } else {
-      setTimeout(checkReady, 200);
-    }
-  };
-  checkReady();
-}
-
 async function classifyImageWithEdgeImpulse(imgElement) {
-  if (!classifierReady) return;
+  if (typeof run !== 'function') {
+    console.error('❌ 模型尚未準備好');
+    document.getElementById('status').innerText = '❌ 模型尚未準備好';
+    return;
+  }
+
   const MODEL_INPUT_SIZE = 96;
   const canvas = document.createElement('canvas');
   canvas.width = MODEL_INPUT_SIZE;
@@ -185,7 +171,7 @@ function refreshImage() {
   cam.src = url;
   hidden.src = url;
   hidden.onload = () => {
-    if (classifierReady) classifyImageWithEdgeImpulse(hidden);
+    classifyImageWithEdgeImpulse(hidden);
   };
 }
 
@@ -215,7 +201,7 @@ async function loadLogTimestamp() {
   }
 }
 
-function startPeriodicTasks() {
+function startAll() {
   loadLogs();
   refreshImage();
   loadLogTimestamp();
@@ -226,9 +212,16 @@ function startPeriodicTasks() {
   }, 2000);
 }
 
-window.onload = () => {
-  document.getElementById('status').innerText = '⏳ 模型載入中...';
-  waitForClassifierReady(startPeriodicTasks);
+window.onload = async () => {
+  document.getElementById('status').innerText = '⏳ 載入 Edge Impulse 模型中...';
+  try {
+    await loadWasmModel('/ei_model/edge-impulse-standalone.wasm');
+    document.getElementById('status').innerText = '✅ 模型載入完成';
+    startAll();
+  } catch (err) {
+    console.error("❌ 模型載入失敗：", err);
+    document.getElementById('status').innerText = '❌ 模型載入失敗';
+  }
 };
 </script>
 </body>
