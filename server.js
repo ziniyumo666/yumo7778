@@ -5,7 +5,9 @@ const fs = require('fs');
 const path = require('path');
 const jpeg = require('jpeg-js');
 const nodemailer = require('nodemailer');
-const ei = require('./ei_model/run-impulse');
+const { EdgeImpulseClassifier } = require('./ei_model/run-impulse');
+
+const classifier = new EdgeImpulseClassifier();
 
 const app = express();
 const logs = [];
@@ -32,8 +34,6 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
     fs.appendFileSync(logPath, logLine);
     console.log(logLine.trim());
 
-    if (typeof ei.classify !== 'function') throw new Error('模型 classify 函式不存在');
-
     const decoded = jpeg.decode(req.body, true);
     const { data } = decoded;
 
@@ -44,7 +44,8 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
       input.push(data[i + 2] / 255);
     }
 
-    const result = ei.classify(input);
+    await classifier.init();
+    const result = classifier.classify(input);
     const top = result.results?.sort((a, b) => b.value - a.value)[0] || { label: '-', value: 0 };
 
     fs.writeFileSync(inferenceLogPath, JSON.stringify(top));
