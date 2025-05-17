@@ -112,10 +112,10 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
     }
 
     const top = result.results?.[0] || { label: '-', value: 0 };
-    fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: top.label, value: top.value }));
+    fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: top.label, value: top.value, inferenceTime: new Date().toISOString() }));
   } catch (err) {
     console.error('❌ 圖片處理或推論錯誤：', err);
-    fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: '-', value: 0, error: err.message }));
+    fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: '-', value: 0, error: err.message, errorTime: new Date().toISOString() }));
   }
 
   res.send('Image uploaded and processed.');
