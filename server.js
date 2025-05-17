@@ -5,9 +5,9 @@ const fs = require('fs');
 const path = require('path');
 const jpeg = require('jpeg-js');
 const nodemailer = require('nodemailer');
-const { EdgeImpulseClassifier } = require('./ei_model/run-impulse');
+const ei = require('./ei_model/run-impulse');
 
-const classifier = new EdgeImpulseClassifier();
+const classifier = new ei();
 
 const app = express();
 const logs = [];
@@ -44,8 +44,7 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
       input.push(data[i + 2] / 255);
     }
 
-    await classifier.init();
-    const result = classifier.classify(input);
+    const result = await classifier.classify(input);
     const top = result.results?.sort((a, b) => b.value - a.value)[0] || { label: '-', value: 0 };
 
     fs.writeFileSync(inferenceLogPath, JSON.stringify(top));
@@ -101,3 +100,4 @@ app.get('/latest-image-info', (req, res) => {
   res.json({ timestamp: lines[lines.length - 1] });
 });
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => console.log('🚀 Server is running...'));
+
