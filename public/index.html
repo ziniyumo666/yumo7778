@@ -143,17 +143,38 @@ async function loadLogTimestamp() {
 }
 
 async function loadInferenceResult() {
+  const confidenceThreshold = 0.7; // 設定信心域值，例如 0.7 (70%)
+  const statusEl = document.getElementById('status');
+  const predictionEl = document.getElementById('prediction');
+  const confidenceEl = document.getElementById('confidence');
+
   try {
     const res = await fetch('/inference-log.json');
-    if (!res.ok) throw new Error();
+    if (!res.ok) {
+      throw new Error('無法獲取推論結果');
+    }
     const data = await res.json();
-    document.getElementById('status').innerText = '✅ 推論成功';
-    document.getElementById('prediction').innerText = data.label || '-';
-    document.getElementById('confidence').innerText = data.value ? (data.value * 100).toFixed(2) + '%' : '-';
+
+    if (data && typeof data.value === 'number' && typeof data.label === 'string') {
+      statusEl.innerText = '✅ 推論成功';
+      if (data.value >= confidenceThreshold) {
+        predictionEl.innerText = data.label;
+        confidenceEl.innerText = (data.value * 100).toFixed(2) + '%';
+      } else {
+        predictionEl.innerText = '無';
+        confidenceEl.innerText = '無 (' + (data.value * 100).toFixed(2) + '%)'; // 顯示 "無" 並附帶實際低信心值
+      }
+    } else {
+      // 若資料格式不符或缺失 label/value
+      statusEl.innerText = '⚠️ 推論結果格式錯誤或資料不完整';
+      predictionEl.innerText = '無';
+      confidenceEl.innerText = '無';
+    }
   } catch (e) {
-    document.getElementById('status').innerText = '⚠️ 尚無結果';
-    document.getElementById('prediction').innerText = '-';
-    document.getElementById('confidence').innerText = '-';
+    console.error("載入推論結果時發生錯誤:", e);
+    statusEl.innerText = '⚠️ 尚無結果或載入失敗';
+    predictionEl.innerText = '無';
+    confidenceEl.innerText = '無';
   }
 }
 
