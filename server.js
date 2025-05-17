@@ -13,9 +13,10 @@ const imagePath = path.join(__dirname, 'public', 'latest.jpg');
 const logPath = path.join(__dirname, 'public', 'log.txt');
 const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
 
-let classifier;
+let classifierReady = false;
 eiModule.onRuntimeInitialized = () => {
-  classifier = eiModule;
+  if (typeof eiModule.init === 'function') eiModule.init();
+  classifierReady = true;
   console.log('✅ Edge Impulse 模型已初始化');
 };
 
@@ -38,7 +39,7 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
     fs.appendFileSync(logPath, logLine);
     console.log(logLine.trim());
 
-    if (!classifier || typeof classifier.run_classifier_image !== 'function') throw new Error('模型尚未初始化或不支援影像推論');
+    if (!classifierReady || typeof eiModule.run_classifier !== 'function') throw new Error('模型尚未初始化或不支援推論');
 
     // 解析圖片為 RGB float32
     const decoded = jpeg.decode(req.body, true);
@@ -51,7 +52,7 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
       input.push(data[i + 2] / 255); // B
     }
 
-    const result = classifier.run_classifier(input, width, height, 3); // 假設為 RGB
+    const result = eiModule.run_classifier(input, width, height, 3); // RGB = 3 channel
     const top = result.results?.sort((a, b) => b.value - a.value)[0] || { label: '-', value: 0 };
 
     fs.writeFileSync(inferenceLogPath, JSON.stringify(top));
