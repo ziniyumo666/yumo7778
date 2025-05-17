@@ -187,10 +187,14 @@ app.get('/logs', (req, res) => {
 app.get('/inference-log.json', (req, res) => {
   const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
   if (!fs.existsSync(inferenceLogPath)) {
-    return res.status(404).json({ label: '-', value: 0 });
+    return res.status(404).json({ label: '-', value: 0, error: 'Inference log not found' });
   }
   const data = fs.readFileSync(inferenceLogPath, 'utf8');
   res.setHeader('Content-Type', 'application/json');
+  // 新增：強制無快取的標頭
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.send(data);
 });
 
