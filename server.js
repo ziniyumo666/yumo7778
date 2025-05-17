@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const jpeg = require('jpeg-js');
 const nodemailer = require('nodemailer');
-const eiModule = require('./ei_model/edge-impulse-standalone');
+const ei = require('./ei_model/run-impulse');
 
 const app = express();
 const logs = [];
@@ -14,11 +14,10 @@ const logPath = path.join(__dirname, 'public', 'log.txt');
 const inferenceLogPath = path.join(__dirname, 'public', 'inference-log.json');
 
 let classifierReady = false;
-eiModule.onRuntimeInitialized = () => {
-  if (typeof eiModule.init === 'function') eiModule.init();
+ei.init().then(() => {
   classifierReady = true;
   console.log('✅ Edge Impulse 模型已初始化');
-};
+});
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -39,20 +38,19 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
     fs.appendFileSync(logPath, logLine);
     console.log(logLine.trim());
 
-    if (!classifierReady || typeof eiModule.run_classifier !== 'function') throw new Error('模型尚未初始化或不支援推論');
+    if (!classifierReady || typeof ei.classify !== 'function') throw new Error('模型尚未初始化或不支援推論');
 
-    // 解析圖片為 RGB float32
     const decoded = jpeg.decode(req.body, true);
-    const { width, height, data } = decoded;
+    const { data } = decoded;
 
     const input = [];
     for (let i = 0; i < data.length; i += 4) {
-      input.push(data[i] / 255);     // R
-      input.push(data[i + 1] / 255); // G
-      input.push(data[i + 2] / 255); // B
+      input.push(data[i] / 255);
+      input.push(data[i + 1] / 255);
+      input.push(data[i + 2] / 255);
     }
 
-    const result = eiModule.run_classifier(input, width, height, 3); // RGB = 3 channel
+    const result = ei.classify(input);
     const top = result.results?.sort((a, b) => b.value - a.value)[0] || { label: '-', value: 0 };
 
     fs.writeFileSync(inferenceLogPath, JSON.stringify(top));
