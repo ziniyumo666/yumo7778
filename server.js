@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const multer = require('multer');
@@ -6,6 +7,7 @@ const path = require('path');
 const jpeg = require('jpeg-js');
 const nodemailer = require('nodemailer');
 const runImpulse = require('./ei_model/run-impulse');
+const { createCanvas, loadImage } = require('canvas');
 
 const app = express();
 const logs = [];
@@ -48,20 +50,22 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
       throw new Error('模型尚未初始化或不支援影像推論');
     }
 
-    const decoded = jpeg.decode(req.body, true);
-    const { width, height, data } = decoded;
-    if (width !== 96 || height !== 96) {
-      throw new Error(`圖片尺寸應為 96x96，但實際為 ${width}x${height}`);
-    }
+    const img = await loadImage(imagePath);
+    const MODEL_WIDTH = 96;
+    const MODEL_HEIGHT = 96;
 
-    // 轉換為 planar RGB (R...G...B...)
-    const r = [], g = [], b = [];
+    const canvas = createCanvas(MODEL_WIDTH, MODEL_HEIGHT);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, MODEL_WIDTH, MODEL_HEIGHT);
+    const imageData = ctx.getImageData(0, 0, MODEL_WIDTH, MODEL_HEIGHT);
+
+    const input = [];
+    const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
-      r.push(data[i] / 255);
-      g.push(data[i + 1] / 255);
-      b.push(data[i + 2] / 255);
+      input.push(data[i] / 255);
+      input.push(data[i + 1] / 255);
+      input.push(data[i + 2] / 255);
     }
-    const input = r.concat(g, b);
 
     const result = classifier.classify(input);
     console.log('📊 推論結果：', result);
@@ -147,10 +151,6 @@ app.get('/inference-log.json', (req, res) => {
   const data = fs.readFileSync(inferenceLogPath, 'utf8');
   res.setHeader('Content-Type', 'application/json');
   res.send(data);
-});
-
-app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('🚀 Server is running...');
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
