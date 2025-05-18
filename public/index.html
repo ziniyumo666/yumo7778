@@ -164,8 +164,8 @@ async function loadInferenceResult() {
       predictionEl.innerText = '無';
       confidenceEl.innerText = '-';
     } else if (data.label && typeof data.value === 'number') {
-      statusEl.innerText = '✅ 推論成功';
-      if (data.value > 0.5) {
+      statusEl.innerText = '✅ 模型載入成功';
+      if (data.value > 0.7) {
         predictionEl.innerText = data.label;
       } else {
         predictionEl.innerText = '無';
