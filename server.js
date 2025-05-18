@@ -16,7 +16,7 @@ const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: 'ray2017good@gmail.com', // 請替換成您的 Gmail 帳號
-    pass: 'piimtgblngmbojrv' // 請替換成您的 Gmail 應用程式密碼
+    pass: 'ray950623' // 請替換成您的 Gmail 應用程式密碼
   }
 });
 
