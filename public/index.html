@@ -69,7 +69,7 @@
       font-size: 18px;
       margin-top: 10px;
     }
-    #serverStatus {
+    #serverStatus { /* Renamed from #status for clarity */
       margin-top: 10px;
       font-size: 16px;
       color: #555;
@@ -100,8 +100,7 @@
     <pre id="logContent">載入中...</pre>
 
     <h2>模型辨識結果（由伺服器推論）</h2>
-    <div id="status">等待結果中...</div>
-    <div>預測結果：<strong id="prediction">-</strong></div>
+    <div id="serverStatus">等待結果中...</div> <div>預測結果：<strong id="prediction">-</strong></div>
     <div>信心值：<strong id="confidence">-</strong></div>
   </main>
   <footer>
@@ -112,62 +111,91 @@
 function refreshImage() {
   const cam = document.getElementById('camera');
   const timestamp = new Date().getTime();
-  const url = '/latest.jpg?t=' + timestamp;
+  const url = '/latest.jpg?t=' + timestamp; // Force refresh
   cam.src = url;
 }
 
 async function loadLogs() {
-  const res = await fetch('/logs');
-  const logs = await res.json();
-  const table = document.getElementById('logTable');
-  table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>';
-  logs.reverse().forEach(log => {
-    const row = document.createElement('tr');
-    row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
-    table.appendChild(row);
-  });
+  try {
+    const res = await fetch('/logs');
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    const logs = await res.json();
+    const table = document.getElementById('logTable');
+    table.innerHTML = '<tr><th>事件</th><th>時間</th></tr>'; // Clear and set header
+    logs.slice().reverse().forEach(log => { // Create a reversed copy for display without altering original
+      const row = document.createElement('tr');
+      row.innerHTML = `<td>${log.event}</td><td>${log.time}</td>`;
+      table.appendChild(row);
+    });
+  } catch (e) {
+    console.error("Error loading logs:", e);
+    // Optionally update UI to show error
+  }
 }
 
 async function loadLogTimestamp() {
   try {
     const res = await fetch('/latest-image-info');
-    if (!res.ok) throw new Error();
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const data = await res.json();
-    const latest = data.timestamp;
+    const latest = data.timestamp || '無紀錄';
     document.getElementById('logContent').textContent = latest;
-    document.getElementById('imageTime').innerText = '圖片更新時間：' + latest.replace('📸 圖片上傳成功：', '');
-  } catch {
-    document.getElementById('logContent').textContent = '⚠️ 尚未上傳圖片';
-    document.getElementById('imageTime').innerText = '⚠️ 尚未上傳圖片';
+    document.getElementById('imageTime').innerText = '圖片更新時間：' + (latest.includes('📸') ? latest.replace('📸 圖片上傳成功：', '') : latest);
+  } catch (e) {
+    console.error("Error loading log timestamp:", e);
+    document.getElementById('logContent').textContent = '⚠️ 尚未上傳圖片或讀取失敗';
+    document.getElementById('imageTime').innerText = '⚠️ 尚未上傳圖片或讀取失敗';
   }
 }
 
 async function loadInferenceResult() {
+  const statusEl = document.getElementById('serverStatus');
+  const predictionEl = document.getElementById('prediction');
+  const confidenceEl = document.getElementById('confidence');
   try {
-    const res = await fetch('/inference-log.json');
-    if (!res.ok) throw new Error();
+    const res = await fetch('/inference-log.json?t=' + new Date().getTime()); // Add timestamp to avoid cache
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
     const data = await res.json();
-    document.getElementById('status').innerText = '✅ 推論成功';
-    document.getElementById('prediction').innerText = data.label || '-';
-    document.getElementById('confidence').innerText = data.value ? (data.value * 100).toFixed(2) + '%' : '-';
+
+    if (data.error) {
+      statusEl.innerText = `⚠️ 推論錯誤: ${data.error}`;
+      predictionEl.innerText = '無';
+      confidenceEl.innerText = '-';
+    } else if (data.label && typeof data.value === 'number') {
+      statusEl.innerText = '✅ 推論成功';
+      if (data.value > 0.5) {
+        predictionEl.innerText = data.label;
+      } else {
+        predictionEl.innerText = '無';
+      }
+      confidenceEl.innerText = (data.value * 100).toFixed(2) + '%';
+    } else {
+      statusEl.innerText = '⚠️ 尚無有效結果或格式錯誤';
+      predictionEl.innerText = '無';
+      confidenceEl.innerText = '-';
+    }
   } catch (e) {
-    document.getElementById('status').innerText = '⚠️ 尚無結果';
-    document.getElementById('prediction').innerText = '-';
-    document.getElementById('confidence').innerText = '-';
+    console.error("Error loading inference result:", e);
+    statusEl.innerText = '⚠️ 讀取結果失敗';
+    predictionEl.innerText = '無';
+    confidenceEl.innerText = '-';
   }
 }
 
 function startAll() {
   loadLogs();
-  refreshImage();
+  refreshImage(); // Initial image load
   loadLogTimestamp();
-  loadInferenceResult();
+  loadInferenceResult(); // Initial inference result load
+
   setInterval(() => {
     loadLogs();
     refreshImage();
     loadLogTimestamp();
     loadInferenceResult();
-  }, 5000);
+  }, 5000); // Refresh every 5 seconds
 }
 
 window.onload = startAll;
