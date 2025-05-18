@@ -24,7 +24,7 @@ const transporter = nodemailer.createTransport({
 let model;
 // Define model path and class names (Adjust CLASS_NAMES according to your model)
 const MODEL_PATH = `file://${path.join(__dirname, 'public', 'model', 'model.json')}`;
-const CLASS_NAMES = ['fall_down', 'dangerous_actions', 'look_around', 'shake_hands', 'sitting_still']; // MODIFY THIS ARRAY with your actual class names in order
+const CLASS_NAMES = ['1', '2', '3', '4', '5']; // MODIFY THIS ARRAY with your actual class names in order
 
 // Function to load the TensorFlow.js model
 async function loadModel() {
