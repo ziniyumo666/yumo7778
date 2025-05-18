@@ -115,7 +115,24 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
 
     console.log(`📊 推論結果：Label: ${predictedLabel}, Confidence: ${confidenceValue.toFixed(4)}`);
     fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: predictedLabel, value: confidenceValue }));
+    // 在記錄推論結果之後，加入以下程式碼
+    if (confidenceValue > 0.5) { // 您可以調整此條件，例如 confidenceValue > 0.7 或特定 predictedLabel
+      const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+      const mailOptions = {
+      from: 'ray2017good@gmail.com', // 請確認這是您設定的 Gmail 帳號
+      to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'], // 收件人郵箱
+      subject: `✋ 手勢辨識通知 (${predictedLabel})`, // 郵件主旨，可以加入辨識出的手勢
+      text: `偵測到手勢：「<span class="math-inline">\{predictedLabel\}」\\n信心值：</span>{(confidenceValue * 100).toFixed(2)}%\n發生時間：${time}\n圖片已更新於 latest.jpg` // 郵件內容
+    };
 
+  transporter.sendMail(mailOptions, (error, info) => {
+    if (error) {
+      console.error("❌ 手勢辨識郵件發信失敗：", error);
+    } else {
+      console.log("✅ 手勢辨識郵件發信成功：" + info.response);
+    }
+  });
+}
     // Dispose tensors
     imageTensor.dispose();
     if (predictions instanceof tf.Tensor) {
