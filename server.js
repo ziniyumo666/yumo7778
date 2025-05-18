@@ -122,7 +122,7 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
       from: 'ray2017good@gmail.com', // 請確認這是您設定的 Gmail 帳號
       to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'], // 收件人郵箱
       subject: `✋ 手勢辨識通知 (${predictedLabel})`, // 郵件主旨，可以加入辨識出的手勢
-      text: `偵測到手勢：「<span class="math-inline">\{predictedLabel\}」\\n信心值：</span>{(confidenceValue * 100).toFixed(2)}%\n發生時間：${time}\n圖片已更新於 latest.jpg` // 郵件內容
+      text: `偵測到手勢：「${predictedLabel}」\n發生時間：${emailTime}`
     };
 
   transporter.sendMail(mailOptions, (error, info) => {
