@@ -116,7 +116,7 @@ app.post('/upload-image', express.raw({ type: 'image/jpeg', limit: '5mb' }), asy
     console.log(`📊 推論結果：Label: ${predictedLabel}, Confidence: ${confidenceValue.toFixed(4)}`);
     fs.writeFileSync(inferenceLogPath, JSON.stringify({ label: predictedLabel, value: confidenceValue }));
     // 在記錄推論結果之後，加入以下程式碼
-    if (confidenceValue > 0.5) { // 您可以調整此條件，例如 confidenceValue > 0.7 或特定 predictedLabel
+    if (confidenceValue > 0.7) { // 您可以調整此條件，例如 confidenceValue > 0.7 或特定 predictedLabel
       const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
       const mailOptions = {
       from: 'ray2017good@gmail.com', // 請確認這是您設定的 Gmail 帳號
