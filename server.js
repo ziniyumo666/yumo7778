@@ -16,8 +16,8 @@ const logs = []; // For the /logs endpoint
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'ray2017good@gmail.com', // 請替換成您的 Gmail 帳號
-    pass: 'piimtgblngmbojrv'       // 請替換成您的 Gmail 應用程式密碼
+    user: 'ben76241@gmail.com', // 請替換成您的 Gmail 帳號
+    pass: 'derknwmrijjvpnaj'       // 請替換成您的 Gmail 應用程式密碼
   }
 });
 
@@ -185,7 +185,7 @@ app.post('/upload', (req, res) => {
   console.log("📥 收到傾倒事件：", event, currentTime);
 
   const mailOptions = {
-    from: 'ray2017good@gmail.com',
+    from: 'ben76241@gmail.com',
     to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'],
     subject: `📡 傾倒事件通知`,
     text: `偵測到事件：「${event}」\n發生時間：${currentTime}`
@@ -208,7 +208,7 @@ app.post('/predict-result', (req, res) => {
   console.log(`🤖 (Client-side) 收到模型預測：${result}, 信心值：${confidence} @ ${currentTime}`);
 
   const mailOptions = {
-    from: 'ray2017good@gmail.com',
+    from: 'ben76241@gmail.com',
     to: ['siniyumo666@gmail.com', 'jirui950623@gmail.com'],
     subject: `🤳 ESP32-CAM 模型辨識結果`,
     text: `ESP32-CAM 辨識到手勢：「${result}」\n信心值：${confidence}\n時間：${currentTime}`
