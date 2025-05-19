@@ -38,8 +38,8 @@ async function loadModel() {
 
     // 可選: 模型預熱，以加快首次推論速度
     console.log('🔥 正在預熱模型...');
-    const MODEL_WIDTH = 128; // 與模型訓練時的輸入寬度一致
-    const MODEL_HEIGHT = 128; // 與模型訓練時的輸入高度一致
+    const MODEL_WIDTH = 100; // 與模型訓練時的輸入寬度一致
+    const MODEL_HEIGHT = 100; // 與模型訓練時的輸入高度一致
     const warmupTensor = tf.zeros([1, MODEL_HEIGHT, MODEL_WIDTH, 3]); // 批次大小為1
     const warmupResult = model.predict(warmupTensor);
 
